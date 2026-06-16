@@ -1,0 +1,16 @@
+CARPETA DE RECURSOS (assets)
+============================
+
+Aqui puedes poner 2 archivos OPCIONALES:
+
+1) avatar.jpg
+   - Una foto tuya con la cara visible y bien iluminada.
+   - SOLO se usa si activas el avatar (interruptor "Avatar hablando").
+   - Formato recomendado: foto vertical, fondo simple.
+
+2) logo.png
+   - Tu logo o marca de agua, con fondo TRANSPARENTE (png).
+   - Si lo pones aqui, aparecera en la esquina de todos los videos.
+   - Si no pones nada, los videos saldran sin logo (perfecto tambien).
+
+Si no pones ningun archivo, el programa funciona igual (modo faceless).

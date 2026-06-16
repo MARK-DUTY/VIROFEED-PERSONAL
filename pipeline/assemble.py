@@ -1,0 +1,237 @@
+"""
+Paso 6 del pipeline: ENSAMBLAR el video final con FFmpeg.
+
+Toma las imagenes + la voz + los subtitulos y produce un .mp4 vertical
+(1080x1920, formato Reels/TikTok/Shorts) con:
+  - efecto de zoom suave (Ken Burns) en cada imagen
+  - la voz como audio
+  - los subtitulos "quemados" encima
+  - (opcional) un logo de marca
+  - (opcional) un avatar hablando superpuesto en una esquina
+
+No depende de ninguna GPU: FFmpeg trabaja con el procesador, perfecto para
+tu PC.
+"""
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+
+VIDEO_W = 1080
+VIDEO_H = 1920
+FPS = 30
+
+
+@dataclass
+class AssembleResult:
+    video_path: Path
+    duration: float
+
+
+def find_ffmpeg() -> str:
+    """Localiza el ejecutable de ffmpeg. Lanza error claro si no esta."""
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    # Rutas comunes en Windows si el usuario lo descomprimio junto al programa
+    for candidate in ("ffmpeg.exe", "bin/ffmpeg.exe", "ffmpeg/bin/ffmpeg.exe"):
+        p = Path(candidate)
+        if p.exists():
+            return str(p.resolve())
+    raise ValueError(
+        "No encontre FFmpeg. Instalalo y asegurate de que este en el PATH. "
+        "En Windows puedes usar:  winget install Gyan.FFmpeg"
+    )
+
+
+def find_ffprobe() -> str | None:
+    return shutil.which("ffprobe")
+
+
+def _run(cmd: list[str], cwd: Path | None = None) -> None:
+    proc = subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if proc.returncode != 0:
+        tail = (proc.stderr or "")[-1200:]
+        raise RuntimeError(f"FFmpeg fallo:\n{tail}")
+
+
+def probe_duration(media_path: Path) -> float | None:
+    """Devuelve la duracion en segundos de un audio/video, o None si no se puede."""
+    ffprobe = find_ffprobe()
+    if not ffprobe:
+        return None
+    try:
+        out = subprocess.check_output(
+            [
+                ffprobe, "-v", "quiet", "-print_format", "json",
+                "-show_format", str(media_path),
+            ],
+            text=True,
+        )
+        return float(json.loads(out)["format"]["duration"])
+    except Exception:
+        return None
+
+
+def _make_clip(
+    ffmpeg: str,
+    image: Path,
+    duration: float,
+    out_clip: Path,
+    zoom_in: bool,
+) -> None:
+    """Crea un clip de video a partir de una imagen, con zoom suave."""
+    frames = max(1, int(round(duration * FPS)))
+    # Ken Burns: alternamos acercar / alejar para dar dinamismo
+    if zoom_in:
+        z_expr = "min(zoom+0.0010,1.18)"
+    else:
+        z_expr = "if(lte(zoom,1.0),1.18,max(1.0,zoom-0.0010))"
+
+    # Escalamos grande primero para que el zoom no pixele, recortamos a 9:16,
+    # aplicamos zoompan y fijamos tamano final.
+    vf = (
+        f"scale={VIDEO_W*2}:{VIDEO_H*2}:force_original_aspect_ratio=increase,"
+        f"crop={VIDEO_W*2}:{VIDEO_H*2},"
+        f"zoompan=z='{z_expr}':d={frames}:s={VIDEO_W}x{VIDEO_H}:fps={FPS},"
+        f"setsar=1,format=yuv420p"
+    )
+    cmd = [
+        ffmpeg, "-y", "-loop", "1", "-i", str(image),
+        "-t", f"{duration:.3f}",
+        "-vf", vf,
+        "-r", str(FPS),
+        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+        str(out_clip),
+    ]
+    _run(cmd)
+
+
+def build_video(
+    images: list[Path],
+    audio_path: Path,
+    subtitles_path: Path | None,
+    out_path: Path,
+    work_dir: Path,
+    logo_path: Path | None = None,
+    avatar_video: Path | None = None,
+    target_duration: float | None = None,
+) -> AssembleResult:
+    """
+    Ensambla el video final y lo guarda en out_path.
+
+    images          : lista de imagenes de fondo (en orden)
+    audio_path      : la voz (mp3)
+    subtitles_path  : archivo .ass (o None para sin subtitulos)
+    logo_path       : png con transparencia para marca de agua (opcional)
+    avatar_video    : video del avatar para superponer en esquina (opcional)
+    """
+    ffmpeg = find_ffmpeg()
+    work_dir = Path(work_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if not images:
+        raise ValueError("No hay imagenes para armar el video.")
+
+    # Duracion real del audio (mas fiable que el calculo por palabras)
+    duration = probe_duration(audio_path) or target_duration or 45.0
+    duration = max(5.0, duration + 0.4)  # pequena cola al final
+
+    # Repartir la duracion entre las imagenes
+    n = len(images)
+    per_image = duration / n
+
+    # 1) Crear un clip por imagen
+    clips_dir = work_dir / "clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    clip_paths: list[Path] = []
+    for i, img in enumerate(images):
+        clip = clips_dir / f"clip_{i:02d}.mp4"
+        _make_clip(ffmpeg, Path(img), per_image, clip, zoom_in=(i % 2 == 0))
+        clip_paths.append(clip)
+
+    # 2) Concatenar los clips
+    concat_list = work_dir / "concat.txt"
+    concat_list.write_text(
+        "\n".join(f"file '{c.resolve().as_posix()}'" for c in clip_paths),
+        encoding="utf-8",
+    )
+    silent_video = work_dir / "slideshow.mp4"
+    _run([
+        ffmpeg, "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+        "-c", "copy", str(silent_video),
+    ])
+
+    # 3) Componer pista final: video + audio + subtitulos + logo + avatar
+    # Trabajamos con cwd = work_dir para evitar problemas de rutas en Windows
+    # (sobre todo con el filtro de subtitulos y los dos puntos de "C:").
+    if subtitles_path:
+        subs_local = work_dir / "subtitles.ass"
+        if Path(subtitles_path).resolve() != subs_local.resolve():
+            shutil.copy(Path(subtitles_path), subs_local)
+
+    inputs = ["-i", str(silent_video.resolve()), "-i", str(Path(audio_path).resolve())]
+    next_idx = 2
+    logo_idx = avatar_idx = None
+    if logo_path and Path(logo_path).exists():
+        inputs += ["-i", str(Path(logo_path).resolve())]
+        logo_idx = next_idx
+        next_idx += 1
+    if avatar_video and Path(avatar_video).exists():
+        inputs += ["-i", str(Path(avatar_video).resolve())]
+        avatar_idx = next_idx
+        next_idx += 1
+
+    # Construimos la cadena de filtros paso a paso
+    filters = []
+    last = "0:v"
+
+    if avatar_idx is not None:
+        # Avatar como circulo pequeno arriba-derecha (estilo "talking head")
+        filters.append(
+            f"[{avatar_idx}:v]scale=420:-1,setsar=1[av]"
+        )
+        filters.append(f"[{last}][av]overlay=W-w-50:80[vav]")
+        last = "vav"
+
+    if logo_idx is not None:
+        filters.append(f"[{logo_idx}:v]scale=200:-1[lg]")
+        filters.append(f"[{last}][lg]overlay=W-w-40:H-h-40[vlogo]")
+        last = "vlogo"
+
+    if subtitles_path:
+        filters.append(f"[{last}]ass=subtitles.ass[vsub]")
+        last = "vsub"
+
+    cmd = [ffmpeg, "-y", *inputs]
+    if filters:
+        cmd += ["-filter_complex", ";".join(filters), "-map", f"[{last}]"]
+    else:
+        cmd += ["-map", "0:v"]
+
+    # Mapear el audio: si hay avatar con su propia voz, igual usamos la voz TTS
+    cmd += ["-map", "1:a"]
+    cmd += [
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "192k",
+        "-pix_fmt", "yuv420p", "-r", str(FPS),
+        "-shortest", "-movflags", "+faststart",
+        str(out_path.resolve()),
+    ]
+    _run(cmd, cwd=work_dir)
+
+    if not out_path.exists() or out_path.stat().st_size == 0:
+        raise RuntimeError("El video final no se genero correctamente.")
+
+    return AssembleResult(video_path=out_path, duration=duration)

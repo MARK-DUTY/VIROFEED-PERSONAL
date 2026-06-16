@@ -1,0 +1,21 @@
+# Configuracion con claves secretas - NUNCA subir
+.env
+
+# Entorno de Python
+venv/
+__pycache__/
+*.pyc
+
+# Archivos generados
+output/
+work/
+
+# Fotos/logos personales del usuario
+assets/avatar.jpg
+assets/avatar.jpeg
+assets/avatar.png
+assets/logo.png
+
+# Sistema
+.DS_Store
+Thumbs.db

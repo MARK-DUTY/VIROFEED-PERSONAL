@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ViroFeed AI Personal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>🎬 ViroFeed <span>AI Personal</span></h1>
+    <p class="subtitle">Pega la URL de una noticia y crea un video viral automaticamente</p>
+  </header>
+
+  {% if missing_keys %}
+  <div class="alert">
+    <strong>⚠️ Configuracion incompleta.</strong>
+    Faltan estas claves en tu archivo <code>.env</code>:
+    <ul>
+      {% for k in missing_keys %}<li>{{ k }}</li>{% endfor %}
+    </ul>
+    Abre el archivo <code>.env</code>, pega tus claves, guarda y recarga esta pagina.
+  </div>
+  {% endif %}
+
+  <main>
+    <section class="card" id="form-card">
+      <label class="field">
+        <span>URL de la noticia</span>
+        <input type="url" id="url" placeholder="https://www.ejemplo.com/noticia..." autofocus>
+      </label>
+
+      <div class="row">
+        <label class="field">
+          <span>Duracion</span>
+          <select id="duration">
+            <option value="30" {% if defaults.duration==30 %}selected{% endif %}>30 segundos</option>
+            <option value="45" {% if defaults.duration==45 %}selected{% endif %}>45 segundos</option>
+            <option value="60" {% if defaults.duration==60 %}selected{% endif %}>60 segundos</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Estilo del guion</span>
+          <select id="style">
+            <option value="breaking" {% if defaults.style=='breaking' %}selected{% endif %}>Ultimo minuto</option>
+            <option value="resumen" {% if defaults.style=='resumen' %}selected{% endif %}>Resumen rapido</option>
+            <option value="top3" {% if defaults.style=='top3' %}selected{% endif %}>Top 3 claves</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span>Voz</span>
+          <select id="voice">
+            {% if voice_names %}
+              {% for v in voice_names %}
+                <option value="{{ v }}" {% if v==defaults.voice %}selected{% endif %}>{{ v }}</option>
+              {% endfor %}
+            {% else %}
+              <option value="{{ defaults.voice }}" selected>{{ defaults.voice }}</option>
+              <option value="es-MX-JorgeNeural">es-MX-JorgeNeural</option>
+              <option value="es-MX-DaliaNeural">es-MX-DaliaNeural</option>
+              <option value="es-ES-AlvaroNeural">es-ES-AlvaroNeural</option>
+              <option value="es-ES-ElviraNeural">es-ES-ElviraNeural</option>
+            {% endif %}
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Color de subtitulos</span>
+          <select id="subtitle_color">
+            <option value="amarillo">Amarillo</option>
+            <option value="blanco">Blanco</option>
+            <option value="verde">Verde</option>
+            <option value="rojo">Rojo</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span>Posicion subtitulos</span>
+          <select id="subtitle_position">
+            <option value="center">Centro</option>
+            <option value="bottom">Abajo</option>
+            <option value="top">Arriba</option>
+          </select>
+        </label>
+
+        <label class="field checkbox">
+          <span>Avatar hablando</span>
+          <div class="switch-wrap">
+            <input type="checkbox" id="use_avatar" {% if avatar_enabled %}checked{% endif %}>
+            <small>Usa la nube (limite gratis). Necesita assets/avatar.jpg</small>
+          </div>
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Llamada a la accion (final del video)</span>
+        <input type="text" id="cta" value="{{ defaults.cta }}">
+      </label>
+
+      <button id="generate-btn" class="btn-primary">🚀 Crear video</button>
+    </section>
+
+    <section class="card hidden" id="progress-card">
+      <h2>Generando tu video...</h2>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <p id="progress-msg">Iniciando...</p>
+      <p class="hint">Esto puede tardar entre 1 y 4 minutos. No cierres la ventana.</p>
+    </section>
+
+    <section class="card hidden" id="result-card">
+      <h2>✅ ¡Video listo!</h2>
+      <div class="result-grid">
+        <div class="video-wrap">
+          <video id="result-video" controls></video>
+          <a id="download-link" class="btn-primary" download>⬇️ Descargar video</a>
+        </div>
+        <div class="result-info">
+          <h3>Titulos sugeridos</h3>
+          <ul id="titles-list"></ul>
+          <h3>Hashtags</h3>
+          <p id="hashtags-text" class="hashtags"></p>
+          <h3>Guion</h3>
+          <p id="narration-text" class="narration"></p>
+        </div>
+      </div>
+      <button id="new-btn" class="btn-secondary">+ Crear otro video</button>
+    </section>
+
+    <section class="card hidden error" id="error-card">
+      <h2>❌ Ups, algo fallo</h2>
+      <p id="error-msg"></p>
+      <button id="retry-btn" class="btn-secondary">Volver a intentar</button>
+    </section>
+  </main>
+
+  <footer>
+    <p>ViroFeed AI Personal · Hecho con herramientas gratis · Fase 1</p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
