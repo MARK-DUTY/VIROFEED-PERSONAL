@@ -1,8 +1,11 @@
 # ViroFeed AI Personal - dependencias de Python
 # Instalar con:  pip install -r requirements.txt
+#
+# Usamos versiones MINIMAS (>=) para que pip elija automaticamente las
+# compatibles con tu version de Python (incluido Python 3.14).
 
-flask==3.0.3            # servidor web local (la interfaz que abres en el navegador)
-requests==2.32.3       # llamadas a internet (Groq, Pexels, etc.)
-trafilatura==1.12.2    # extraer el texto limpio de una noticia desde su URL
-edge-tts==6.1.12       # voz en espanol gratis e ilimitada (Microsoft)
-python-dotenv==1.0.1   # leer la configuracion del archivo .env
+flask>=3.0            # servidor web local (la interfaz que abres en el navegador)
+requests>=2.31        # llamadas a internet (Groq, Pexels, etc.)
+trafilatura>=1.12     # extraer el texto limpio de una noticia desde su URL
+edge-tts>=6.1         # voz en espanol gratis e ilimitada (Microsoft)
+python-dotenv>=1.0    # leer la configuracion del archivo .env
