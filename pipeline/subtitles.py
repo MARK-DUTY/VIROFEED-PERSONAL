@@ -25,9 +25,13 @@ SUBTITLE_STYLES = {
 class SubtitleStyle:
     name: str = "amarillo"
     font: str = "Arial Black"
-    font_size: int = 54
-    position: str = "center"   # top | center | bottom
+    font_size: int = 64          # un poco mas grandes que antes (era 54)
+    position: str = "center"     # top | center | bottom
     words_per_group: int = 3
+    # Cuanto BAJAR los subtitulos respecto a su posicion base, en pixeles.
+    # El video mide 1920px de alto; ~75px equivale aprox. a 1 cm en pantalla,
+    # asi que 300px equivale aprox. a 4 cm mas abajo.
+    drop_px: int = 300
 
 
 def _fmt_time(seconds: float) -> str:
@@ -50,6 +54,12 @@ def _escape(text: str) -> str:
 def _alignment(position: str) -> int:
     # Numpad alignment de ASS: 2=abajo, 5=centro, 8=arriba (centrado horizontal)
     return {"top": 8, "center": 5, "bottom": 2}.get(position, 5)
+
+
+def _base_y(position: str, video_h: int) -> int:
+    """Posicion vertical BASE (centro del texto) segun la posicion elegida."""
+    fractions = {"top": 0.20, "center": 0.50, "bottom": 0.80}
+    return int(video_h * fractions.get(position, 0.50))
 
 
 def _group_words(words: list[WordTiming], per_group: int) -> list[tuple[float, float, str]]:
@@ -84,11 +94,16 @@ def build_ass_subtitles(
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     colors = SUBTITLE_STYLES.get(style.name, SUBTITLE_STYLES["amarillo"])
-    align = _alignment(style.position)
 
-    # Margen vertical segun posicion
-    margin_v = {"top": 220, "center": 0, "bottom": 320}.get(style.position, 0)
+    # Posicion vertical EXACTA (centro del bloque de texto), en pixeles.
+    # Partimos de la posicion base y la bajamos 'drop_px' (por defecto ~4 cm).
+    center_x = video_w // 2
+    target_y = _base_y(style.position, video_h) + max(0, style.drop_px)
+    # Evitamos que se salga de la pantalla (dejamos margen arriba y abajo).
+    target_y = max(int(video_h * 0.12), min(target_y, int(video_h * 0.90)))
 
+    # Usamos alineacion 5 (centrado) porque colocamos el texto con \pos de forma
+    # exacta; asi el movimiento hacia abajo es predecible en cualquier reproductor.
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {video_w}
@@ -98,7 +113,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Viral,{style.font},{style.font_size},{colors['primary']},&H000000FF,{colors['outline']},&H64000000,-1,0,0,0,100,100,0,0,1,4,2,{align},80,80,{margin_v},1
+Style: Viral,{style.font},{style.font_size},{colors['primary']},&H000000FF,{colors['outline']},&H64000000,-1,0,0,0,100,100,0,0,1,4,2,5,80,80,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -107,10 +122,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     lines = [header]
     for start, end, text in _group_words(words, style.words_per_group):
         text = _escape(text)
-        # \fad = fundido de entrada/salida; pequeno "pop" visual
+        # \pos coloca el texto en la posicion exacta; \fad da el fundido de entrada/salida
         dialogue = (
             f"Dialogue: 0,{_fmt_time(start)},{_fmt_time(end)},Viral,,0,0,0,,"
-            f"{{\\fad(60,60)}}{text}"
+            f"{{\\pos({center_x},{target_y})\\fad(60,60)}}{text}"
         )
         lines.append(dialogue)
 
