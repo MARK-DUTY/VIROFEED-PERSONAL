@@ -125,6 +125,7 @@ def build_video(
     logo_path: Path | None = None,
     avatar_video: Path | None = None,
     target_duration: float | None = None,
+    image_durations: list[float] | None = None,
 ) -> AssembleResult:
     """
     Ensambla el video final y lo guarda en out_path.
@@ -134,6 +135,8 @@ def build_video(
     subtitles_path  : archivo .ass (o None para sin subtitulos)
     logo_path       : png con transparencia para marca de agua (opcional)
     avatar_video    : video del avatar para superponer en esquina (opcional)
+    image_durations : duracion (segundos) de cada imagen, para sincronizar cada
+                      imagen con su escena. Si es None, se reparte por igual.
     """
     ffmpeg = find_ffmpeg()
     work_dir = Path(work_dir)
@@ -148,9 +151,16 @@ def build_video(
     duration = probe_duration(audio_path) or target_duration or 45.0
     duration = max(5.0, duration + 0.4)  # pequena cola al final
 
-    # Repartir la duracion entre las imagenes
     n = len(images)
-    per_image = duration / n
+
+    # Duracion de cada imagen: la indicada (sincronizada con escenas) o pareja
+    if image_durations and len(image_durations) == n:
+        total = sum(image_durations) or duration
+        # Reescalar para que sumen exactamente la duracion del audio
+        factor = duration / total
+        per_image_list = [max(1.2, d * factor) for d in image_durations]
+    else:
+        per_image_list = [duration / n] * n
 
     # 1) Crear un clip por imagen
     clips_dir = work_dir / "clips"
@@ -158,7 +168,7 @@ def build_video(
     clip_paths: list[Path] = []
     for i, img in enumerate(images):
         clip = clips_dir / f"clip_{i:02d}.mp4"
-        _make_clip(ffmpeg, Path(img), per_image, clip, zoom_in=(i % 2 == 0))
+        _make_clip(ffmpeg, Path(img), per_image_list[i], clip, zoom_in=(i % 2 == 0))
         clip_paths.append(clip)
 
     # 2) Concatenar los clips

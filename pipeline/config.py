@@ -47,6 +47,7 @@ class Settings:
     video_duration: int = field(default_factory=lambda: int(os.getenv("VIDEO_DURATION", "45") or 45))
     script_style: str = field(default_factory=lambda: os.getenv("SCRIPT_STYLE", "breaking").strip())
     call_to_action: str = field(default_factory=lambda: os.getenv("CALL_TO_ACTION", "Sigueme para mas noticias").strip())
+    image_source: str = field(default_factory=lambda: os.getenv("IMAGE_SOURCE", "hybrid").strip().lower())
 
     # --- Carpetas de trabajo ---
     root_dir: Path = ROOT_DIR

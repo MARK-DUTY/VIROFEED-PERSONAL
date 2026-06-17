@@ -52,6 +52,7 @@ def index():
             "duration": settings.video_duration,
             "style": settings.script_style,
             "cta": settings.call_to_action,
+            "image_source": settings.image_source,
         },
     )
 
@@ -85,6 +86,7 @@ def api_generate():
         "cta": data.get("cta") or fresh.call_to_action,
         "subtitle_color": data.get("subtitle_color") or "amarillo",
         "subtitle_position": data.get("subtitle_position") or "center",
+        "image_source": data.get("image_source") or fresh.image_source,
         "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
     }
 

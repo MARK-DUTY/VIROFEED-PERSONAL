@@ -32,6 +32,7 @@ async function startGeneration() {
     voice: $("voice").value,
     subtitle_color: $("subtitle_color").value,
     subtitle_position: $("subtitle_position").value,
+    image_source: $("image_source").value,
     cta: $("cta").value,
     use_avatar: $("use_avatar").checked,
   };

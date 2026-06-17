@@ -2,8 +2,14 @@
 Paso 2 del pipeline: convertir el texto de la noticia en un GUION VIRAL.
 
 Usa la API de Groq (gratis) con un modelo Llama. Le pedimos que devuelva
-un JSON con: guion narrado, palabras clave para buscar imagenes, titulos
-y hashtags (igual que hace ViroFeed con su seccion de "hooks & SEO").
+un JSON dividido en ESCENAS. Cada escena trae:
+  - text         : la parte del guion que se narra en esa escena
+  - image_prompt : descripcion visual detallada (en ingles) para GENERAR la
+                   imagen con IA que concuerde con lo que se narra
+  - keyword      : termino corto (en ingles) para buscar foto de stock (respaldo)
+
+Asi cada imagen concuerda con lo que se esta diciendo en ese momento.
+Tambien devuelve titulos y hashtags (la seccion "hooks & SEO" de ViroFeed).
 """
 from __future__ import annotations
 
@@ -29,19 +35,32 @@ _STYLE_DESC = {
 
 
 @dataclass
+class Scene:
+    """Una escena del video: su texto narrado + como debe verse la imagen."""
+    text: str
+    image_prompt: str   # descripcion detallada en ingles para generar imagen IA
+    keyword: str        # termino corto en ingles para buscar foto de stock
+
+
+@dataclass
 class VideoScript:
     """Todo lo que la IA genera para el video."""
-    narration: str               # el texto que dira la voz (sin emojis ni hashtags)
-    image_keywords: list[str] = field(default_factory=list)  # busquedas para imagenes
-    titles: list[str] = field(default_factory=list)          # titulos/hooks para publicar
-    hashtags: list[str] = field(default_factory=list)        # hashtags
-    raw: dict = field(default_factory=dict)                  # respuesta cruda por si acaso
+    narration: str                       # texto completo a narrar (= union de escenas)
+    scenes: list[Scene] = field(default_factory=list)
+    titles: list[str] = field(default_factory=list)
+    hashtags: list[str] = field(default_factory=list)
+    raw: dict = field(default_factory=dict)
+
+    @property
+    def image_keywords(self) -> list[str]:
+        """Compatibilidad: lista de keywords de stock por escena."""
+        return [s.keyword for s in self.scenes if s.keyword]
 
 
 def _build_prompt(article: Article, duration: int, style: str, cta: str) -> list[dict]:
     target_words = int(duration * _WORDS_PER_SECOND)
     style_desc = _STYLE_DESC.get(style, _STYLE_DESC["breaking"])
-    n_images = max(4, min(8, round(duration / 7)))
+    n_scenes = max(4, min(9, round(duration / 6)))
 
     system = (
         "Eres un guionista experto en videos cortos virales (Reels, TikTok, "
@@ -51,7 +70,7 @@ def _build_prompt(article: Article, duration: int, style: str, cta: str) -> list
     )
 
     user = f"""
-A partir de esta noticia, crea un guion para un video vertical corto.
+A partir de esta noticia, crea un guion para un video vertical corto, DIVIDIDO EN ESCENAS.
 
 TITULO DE LA NOTICIA:
 {article.title}
@@ -59,19 +78,34 @@ TITULO DE LA NOTICIA:
 CONTENIDO DE LA NOTICIA:
 {article.text[:6000]}
 
-REQUISITOS DEL GUION:
-- Idioma: espanol latino, cercano y natural (como hablandole a un amigo).
+REQUISITOS:
+- Idioma del guion (campo "text"): espanol latino, cercano y natural.
 - Estilo: {style_desc}.
-- Duracion objetivo: {duration} segundos (aprox. {target_words} palabras).
-- El PRIMER renglon debe ser un GANCHO que enganche en los primeros 3 segundos.
-- Termina con esta llamada a la accion (puedes adaptarla levemente): "{cta}".
-- NO incluyas emojis, ni hashtags, ni acotaciones de escena dentro de 'narration'.
-- 'narration' es SOLO lo que se va a narrar en voz alta, en texto corrido.
+- Duracion objetivo total: {duration} segundos (aprox. {target_words} palabras en total).
+- Divide el guion en {n_scenes} escenas aproximadamente.
+- La PRIMERA escena debe ser un GANCHO que enganche en los primeros 3 segundos.
+- La ULTIMA escena debe cerrar con esta llamada a la accion (puedes adaptarla): "{cta}".
+- En "text" NO pongas emojis, ni hashtags, ni acotaciones. Solo lo que se narra.
+
+MUY IMPORTANTE sobre las imagenes (concordancia):
+- Para CADA escena, "image_prompt" debe describir EN INGLES, de forma visual y
+  concreta, una imagen que represente EXACTAMENTE lo que se narra en esa escena.
+  Ejemplo: si la escena habla de gatos, image_prompt = "a cute domestic cat
+  sitting on a sofa, photorealistic". Si habla del Dia de Muertos en Mexico,
+  image_prompt = "Mexican Day of the Dead altar with marigolds, candles and
+  sugar skulls, vibrant, photorealistic".
+- "keyword" debe ser un termino corto EN INGLES (2 a 4 palabras) para buscar
+  una foto de stock relacionada con esa escena (respaldo).
 
 DEVUELVE EXCLUSIVAMENTE UN JSON con esta forma EXACTA (sin texto extra):
 {{
-  "narration": "el guion completo para narrar...",
-  "image_keywords": ["{n_images} busquedas en INGLES para encontrar imagenes de stock, una por escena"],
+  "scenes": [
+    {{
+      "text": "parte del guion que se narra en esta escena",
+      "image_prompt": "detailed English visual description of the scene, photorealistic",
+      "keyword": "short english stock term"
+    }}
+  ],
   "titles": ["3 titulos virales para publicar el video"],
   "hashtags": ["8 a 12 hashtags relevantes sin el simbolo #"]
 }}
@@ -85,13 +119,11 @@ DEVUELVE EXCLUSIVAMENTE UN JSON con esta forma EXACTA (sin texto extra):
 def _extract_json(content: str) -> dict:
     """La IA a veces envuelve el JSON en texto o ```; lo limpiamos."""
     content = content.strip()
-    # Quitar vallas de codigo ```json ... ```
     content = re.sub(r"^```(?:json)?", "", content).strip()
     content = re.sub(r"```$", "", content).strip()
     try:
         return json.loads(content)
     except json.JSONDecodeError:
-        # Buscar el primer { ... } balanceado
         start = content.find("{")
         end = content.rfind("}")
         if start != -1 and end != -1 and end > start:
@@ -106,7 +138,7 @@ def generate_script(
     cta: str | None = None,
     timeout: int = 60,
 ) -> VideoScript:
-    """Llama a Groq y devuelve un VideoScript listo para usar."""
+    """Llama a Groq y devuelve un VideoScript con escenas listo para usar."""
     if not settings.groq_api_key or settings.groq_api_key.startswith("PEGA_AQUI"):
         raise ValueError(
             "Falta la clave de Groq (GROQ_API_KEY) en tu archivo .env. "
@@ -121,7 +153,7 @@ def generate_script(
         "model": settings.groq_model,
         "messages": _build_prompt(article, duration, style, cta),
         "temperature": 0.8,
-        "max_tokens": 1500,
+        "max_tokens": 2000,
         "response_format": {"type": "json_object"},
     }
     headers = {
@@ -149,21 +181,28 @@ def generate_script(
     except Exception as exc:
         raise ValueError(f"La IA no devolvio un JSON valido. Detalle: {exc}") from exc
 
-    narration = (parsed.get("narration") or "").strip()
-    if not narration:
-        raise ValueError("La IA no genero texto de narracion. Intenta de nuevo.")
+    raw_scenes = parsed.get("scenes", [])
+    scenes: list[Scene] = []
+    for s in raw_scenes:
+        text = (s.get("text") or "").strip()
+        if not text:
+            continue
+        image_prompt = (s.get("image_prompt") or "").strip() or text
+        keyword = (s.get("keyword") or "").strip() or image_prompt
+        scenes.append(Scene(text=text, image_prompt=image_prompt, keyword=keyword))
 
-    keywords = [str(k).strip() for k in parsed.get("image_keywords", []) if str(k).strip()]
+    if not scenes:
+        raise ValueError("La IA no genero escenas. Intenta de nuevo.")
+
+    # La narracion completa es la union de los textos de las escenas.
+    narration = " ".join(s.text for s in scenes).strip()
+
     titles = [str(t).strip() for t in parsed.get("titles", []) if str(t).strip()]
     hashtags = [str(h).strip().lstrip("#") for h in parsed.get("hashtags", []) if str(h).strip()]
 
-    # Respaldo: si la IA no dio keywords, usamos el titulo de la noticia
-    if not keywords:
-        keywords = [article.title]
-
     return VideoScript(
         narration=narration,
-        image_keywords=keywords,
+        scenes=scenes,
         titles=titles,
         hashtags=hashtags,
         raw=parsed,

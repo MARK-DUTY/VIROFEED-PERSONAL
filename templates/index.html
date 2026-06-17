@@ -89,6 +89,17 @@
           </select>
         </label>
 
+        <label class="field">
+          <span>Fuente de imagenes</span>
+          <select id="image_source">
+            <option value="hybrid" {% if defaults.image_source=='hybrid' %}selected{% endif %}>Hibrido (IA + stock) - recomendado</option>
+            <option value="ai" {% if defaults.image_source=='ai' %}selected{% endif %}>IA (concuerda mejor)</option>
+            <option value="stock" {% if defaults.image_source=='stock' %}selected{% endif %}>Fotos reales (stock)</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
         <label class="field checkbox">
           <span>Avatar hablando</span>
           <div class="switch-wrap">
