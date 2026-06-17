@@ -66,6 +66,10 @@ virofeed-personal/
 - [x] Claves de Groq y Pexels configuradas en .env. La interfaz web abre OK.
 - [x] Sistema de actualizacion via actualizar.bat (descarga codigo desde GitHub).
 - [x] SUBTITULOS funcionando (via Plan B: reparto por texto). Videos completos OK.
+- [x] IMAGENES Opcion 3: generacion IA (Pollinations, gratis sin clave) + stock,
+      una por escena y sincronizadas con la narracion. Selector en la interfaz.
+- [x] REVISION DE IMAGENES (flujo 2 pasos como editor de ViroFeed): Preparar ->
+      revisar/regenerar/subir imagenes por escena -> Generar video final.
 
 ## ⚠️ Nota tecnica conocida
 - Edge TTS en el equipo del usuario NO devuelve los tiempos por palabra

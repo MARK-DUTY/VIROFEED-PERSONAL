@@ -114,14 +114,22 @@
         <input type="text" id="cta" value="{{ defaults.cta }}">
       </label>
 
-      <button id="generate-btn" class="btn-primary">🚀 Crear video</button>
+      <button id="generate-btn" class="btn-primary">🎬 Preparar video</button>
     </section>
 
     <section class="card hidden" id="progress-card">
-      <h2>Generando tu video...</h2>
+      <h2 id="progress-title">Preparando tu video...</h2>
       <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
       <p id="progress-msg">Iniciando...</p>
-      <p class="hint">Esto puede tardar entre 1 y 4 minutos. No cierres la ventana.</p>
+      <p class="hint">Esto puede tardar entre 1 y 6 minutos. No cierres la ventana.</p>
+    </section>
+
+    <section class="card hidden" id="review-card">
+      <h2>🖼️ Revisa las imagenes</h2>
+      <p class="hint">Cambia las que salieron mal o no concuerdan. Cuando esten listas, genera el video.</p>
+      <div id="scenes-grid" class="scenes-grid"></div>
+      <button id="assemble-btn" class="btn-primary">✅ Generar video final</button>
+      <button id="cancel-review-btn" class="btn-secondary">← Empezar de nuevo</button>
     </section>
 
     <section class="card hidden" id="result-card">

@@ -136,6 +136,41 @@ def _download_stock(query: str, dest: Path, used_urls: set[str]) -> str | None:
     return None
 
 
+def fetch_single_image(
+    image_prompt: str,
+    keyword: str,
+    dest: Path,
+    mode: str = "hybrid",
+    seed: int | None = None,
+) -> ImageResult | None:
+    """
+    Consigue UNA sola imagen para una escena (se usa al REGENERAR una imagen
+    que salio mal o no concuerda).
+
+    mode: "ai" (generar con IA) | "stock" (foto real) | "hybrid" (IA y si falla, stock)
+    seed: cambia la semilla para que la IA genere una imagen DISTINTA cada vez.
+    """
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    mode = (mode or "hybrid").lower()
+
+    # 1) Generar con IA
+    if mode in ("ai", "hybrid"):
+        if generate_ai_image(image_prompt, dest, seed=seed):
+            return ImageResult(path=dest, source="ai", query=image_prompt)
+
+    # 2) Foto de stock
+    if mode in ("stock", "hybrid", "ai"):
+        used: set[str] = set()
+        src = _download_stock(keyword, dest, used)
+        if src is None and image_prompt:
+            src = _download_stock(image_prompt.split(",")[0], dest, used)
+        if src:
+            return ImageResult(path=dest, source=src, query=keyword)
+
+    return None
+
+
 # --------------------------------------------------------------------------
 #  Funcion principal: una imagen por escena
 # --------------------------------------------------------------------------

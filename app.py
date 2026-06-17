@@ -1,8 +1,10 @@
 """
 ViroFeed AI Personal - Servidor web local (interfaz)
 
-Este es el programa que ejecutas. Abre una pagina web en tu navegador donde
-pegas la URL de una noticia y, con un clic, se genera el video.
+Flujo en DOS PASOS (como el editor de ViroFeed):
+  1) PREPARAR: genera guion + voz + imagenes y te las muestra para revisar.
+  2) REVISAR : cambias/regeneras las imagenes que salieron mal.
+  3) GENERAR : arma el video final con las imagenes aprobadas.
 
 Para arrancar:   python app.py
 Luego abre:      http://localhost:5000
@@ -12,29 +14,29 @@ from __future__ import annotations
 import threading
 import traceback
 import uuid
-import webbrowser
 from pathlib import Path
 
-from flask import (
-    Flask,
-    jsonify,
-    render_template,
-    request,
-    send_from_directory,
-)
+from flask import Flask, jsonify, render_template, request, send_from_directory
+from werkzeug.utils import secure_filename
 
 from pipeline.config import settings
-from pipeline.runner import create_video_from_url
+from pipeline.runner import (
+    assemble_prepared,
+    prepare_video,
+    regenerate_scene_image,
+    set_scene_image,
+)
 from pipeline.voice import list_spanish_voices
 
 app = Flask(__name__)
 
-# Estado de los trabajos en curso (en memoria). clave = job_id
+# Estado de los trabajos (en memoria). clave = job_id
+#   cada job: {status, phase, message, percent, error, prepared, options, review, result}
 JOBS: dict[str, dict] = {}
 
 
 # --------------------------------------------------------------------------
-#  Paginas
+#  Pagina principal
 # --------------------------------------------------------------------------
 @app.route("/")
 def index():
@@ -58,54 +60,196 @@ def index():
 
 
 # --------------------------------------------------------------------------
-#  API: iniciar un trabajo de generacion
+#  Utilidad: armar la lista de escenas para la interfaz
 # --------------------------------------------------------------------------
-@app.route("/api/generate", methods=["POST"])
-def api_generate():
+def _review_payload(job_id: str) -> dict:
+    job = JOBS[job_id]
+    prepared = job["prepared"]
+    scenes = []
+    for i, (scene, img) in enumerate(zip(prepared.scenes, prepared.images)):
+        scenes.append({
+            "index": i,
+            "text": scene.text,
+            "image_prompt": scene.image_prompt,
+            "keyword": scene.keyword,
+            "image_file": Path(img.path).name,
+            "source": img.source,
+        })
+    return {
+        "job_id": job_id,
+        "title": prepared.title,
+        "narration": prepared.narration,
+        "titles": prepared.titles,
+        "hashtags": prepared.hashtags,
+        "duration": round(prepared.real_duration, 1),
+        "scenes": scenes,
+    }
+
+
+# --------------------------------------------------------------------------
+#  PASO 1: preparar (guion + voz + imagenes)
+# --------------------------------------------------------------------------
+@app.route("/api/prepare", methods=["POST"])
+def api_prepare():
     data = request.get_json(force=True) or {}
     url = (data.get("url") or "").strip()
     if not url:
         return jsonify({"error": "Pega la URL de una noticia primero."}), 400
 
-    # Recargar config por si el usuario edito el .env
     fresh = settings.reload()
     missing = fresh.missing_keys()
     if "GROQ_API_KEY" in missing or any("PEXELS" in m for m in missing):
-        return jsonify({
-            "error": "Faltan claves en tu archivo .env: " + ", ".join(missing)
-        }), 400
+        return jsonify({"error": "Faltan claves en tu archivo .env: " + ", ".join(missing)}), 400
 
     job_id = uuid.uuid4().hex[:12]
-    JOBS[job_id] = {"status": "running", "message": "Iniciando...", "percent": 0, "result": None, "error": None}
-
     options = {
         "duration": int(data.get("duration") or fresh.video_duration),
         "style": data.get("style") or fresh.script_style,
         "voice": data.get("voice") or fresh.tts_voice,
         "rate": data.get("rate") if data.get("rate") is not None else fresh.tts_rate,
         "cta": data.get("cta") or fresh.call_to_action,
+        "image_source": data.get("image_source") or fresh.image_source,
         "subtitle_color": data.get("subtitle_color") or "amarillo",
         "subtitle_position": data.get("subtitle_position") or "center",
-        "image_source": data.get("image_source") or fresh.image_source,
         "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
     }
+    JOBS[job_id] = {
+        "status": "running", "phase": "preparing", "message": "Iniciando...",
+        "percent": 0, "error": None, "prepared": None, "options": options,
+        "review": None, "result": None,
+    }
 
-    thread = threading.Thread(target=_run_job, args=(job_id, url, options), daemon=True)
-    thread.start()
+    threading.Thread(target=_run_prepare, args=(job_id, url, options), daemon=True).start()
     return jsonify({"job_id": job_id})
 
 
-def _run_job(job_id: str, url: str, options: dict) -> None:
+def _run_prepare(job_id: str, url: str, options: dict) -> None:
     def progress(msg: str, pct: int) -> None:
         JOBS[job_id]["message"] = msg
         JOBS[job_id]["percent"] = pct
 
     try:
-        result = create_video_from_url(url, progress=progress, **options)
-        JOBS[job_id]["status"] = "done"
+        prepared = prepare_video(
+            url,
+            duration=options["duration"],
+            style=options["style"],
+            voice=options["voice"],
+            rate=options["rate"],
+            cta=options["cta"],
+            image_source=options["image_source"],
+            progress=progress,
+        )
+        JOBS[job_id]["prepared"] = prepared
+        JOBS[job_id]["phase"] = "review"
+        JOBS[job_id]["status"] = "ready"
         JOBS[job_id]["percent"] = 100
-        JOBS[job_id]["message"] = "Listo!"
-        JOBS[job_id]["result"] = {
+        JOBS[job_id]["message"] = "Listo para revisar"
+        JOBS[job_id]["review"] = _review_payload(job_id)
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc()
+        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["error"] = str(exc)
+
+
+# --------------------------------------------------------------------------
+#  Regenerar la imagen de una escena
+# --------------------------------------------------------------------------
+@app.route("/api/regenerate_image", methods=["POST"])
+def api_regenerate_image():
+    data = request.get_json(force=True) or {}
+    job_id = data.get("job_id")
+    job = JOBS.get(job_id)
+    if not job or not job.get("prepared"):
+        return jsonify({"error": "Trabajo no encontrado o expirado."}), 404
+
+    try:
+        index = int(data.get("index"))
+        mode = (data.get("mode") or "hybrid").lower()
+        new_prompt = data.get("prompt")
+        attempt = int(data.get("attempt") or 0)
+        result = regenerate_scene_image(
+            job["prepared"], index, mode=mode, new_prompt=new_prompt, attempt=attempt
+        )
+        job["review"] = _review_payload(job_id)
+        return jsonify({
+            "index": index,
+            "image_file": Path(result.path).name,
+            "source": result.source,
+        })
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"error": str(exc)}), 400
+
+
+# --------------------------------------------------------------------------
+#  Subir una imagen propia para una escena
+# --------------------------------------------------------------------------
+@app.route("/api/upload_image", methods=["POST"])
+def api_upload_image():
+    job_id = request.form.get("job_id")
+    job = JOBS.get(job_id)
+    if not job or not job.get("prepared"):
+        return jsonify({"error": "Trabajo no encontrado o expirado."}), 404
+    if "image" not in request.files:
+        return jsonify({"error": "No se recibio ninguna imagen."}), 400
+
+    try:
+        index = int(request.form.get("index"))
+        prepared = job["prepared"]
+        file = request.files["image"]
+        ext = Path(secure_filename(file.filename or "img.jpg")).suffix.lower() or ".jpg"
+        if ext not in (".jpg", ".jpeg", ".png", ".webp"):
+            return jsonify({"error": "Formato no valido. Usa JPG, PNG o WEBP."}), 400
+        dest = prepared.job_dir / "images" / f"img_{index:02d}_subida{ext}"
+        file.save(str(dest))
+        set_scene_image(prepared, index, dest, source="subida")
+        job["review"] = _review_payload(job_id)
+        return jsonify({"index": index, "image_file": dest.name, "source": "subida"})
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"error": str(exc)}), 400
+
+
+# --------------------------------------------------------------------------
+#  PASO 2: ensamblar el video final
+# --------------------------------------------------------------------------
+@app.route("/api/assemble", methods=["POST"])
+def api_assemble():
+    data = request.get_json(force=True) or {}
+    job_id = data.get("job_id")
+    job = JOBS.get(job_id)
+    if not job or not job.get("prepared"):
+        return jsonify({"error": "Trabajo no encontrado o expirado."}), 404
+
+    job["phase"] = "assembling"
+    job["status"] = "running"
+    job["percent"] = 0
+    job["message"] = "Preparando ensamblaje..."
+    threading.Thread(target=_run_assemble, args=(job_id,), daemon=True).start()
+    return jsonify({"job_id": job_id})
+
+
+def _run_assemble(job_id: str) -> None:
+    job = JOBS[job_id]
+    options = job["options"]
+
+    def progress(msg: str, pct: int) -> None:
+        job["message"] = msg
+        job["percent"] = pct
+
+    try:
+        result = assemble_prepared(
+            job["prepared"],
+            subtitle_color=options["subtitle_color"],
+            subtitle_position=options["subtitle_position"],
+            use_avatar=options["use_avatar"],
+            progress=progress,
+        )
+        job["status"] = "done"
+        job["phase"] = "done"
+        job["percent"] = 100
+        job["message"] = "Listo!"
+        job["result"] = {
             "video_file": result.video_path.name,
             "title": result.title,
             "narration": result.narration,
@@ -116,24 +260,45 @@ def _run_job(job_id: str, url: str, options: dict) -> None:
         }
     except Exception as exc:  # noqa: BLE001
         traceback.print_exc()
-        JOBS[job_id]["status"] = "error"
-        JOBS[job_id]["error"] = str(exc)
-        JOBS[job_id]["message"] = "Error"
+        job["status"] = "error"
+        job["error"] = str(exc)
 
 
 # --------------------------------------------------------------------------
-#  API: consultar el progreso de un trabajo
+#  Estado de un trabajo
 # --------------------------------------------------------------------------
 @app.route("/api/status/<job_id>")
 def api_status(job_id: str):
     job = JOBS.get(job_id)
     if not job:
         return jsonify({"error": "Trabajo no encontrado"}), 404
-    return jsonify(job)
+    return jsonify({
+        "status": job["status"],
+        "phase": job["phase"],
+        "message": job["message"],
+        "percent": job["percent"],
+        "error": job["error"],
+        "review": job["review"],
+        "result": job["result"],
+    })
 
 
 # --------------------------------------------------------------------------
-#  Servir y descargar los videos generados
+#  Servir imagenes de previsualizacion (durante la revision)
+# --------------------------------------------------------------------------
+@app.route("/preview/<job_id>/<path:filename>")
+def serve_preview(job_id: str, filename: str):
+    job = JOBS.get(job_id)
+    if not job or not job.get("prepared"):
+        return "No encontrado", 404
+    images_dir = job["prepared"].job_dir / "images"
+    resp = send_from_directory(images_dir, filename)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+# --------------------------------------------------------------------------
+#  Servir y descargar los videos finales
 # --------------------------------------------------------------------------
 @app.route("/video/<path:filename>")
 def serve_video(filename: str):
@@ -147,6 +312,7 @@ def download_video(filename: str):
 
 def _open_browser():
     try:
+        import webbrowser
         webbrowser.open("http://localhost:5000")
     except Exception:
         pass
@@ -155,7 +321,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 2 (subtitulos con Plan B)")
+    print("  VERSION DEL CODIGO: 3 (revision de imagenes)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)
