@@ -61,15 +61,25 @@ virofeed-personal/
 - [x] Programa completo construido (faceless + interruptor de avatar).
 - [x] Código verificado sin errores de sintaxis.
 - [x] Instaladores y guía para Windows.
-- [x] Subido a GitHub: github.com/MARK-DUTY/VIROFEED-PERSONAL
+- [x] Subido a GitHub: github.com/MARK-DUTY/VIROFEED-PERSONAL (PUBLICO).
 - [x] Instalado en el Windows del usuario (Python 3.14) y FUNCIONANDO.
 - [x] Claves de Groq y Pexels configuradas en .env. La interfaz web abre OK.
+- [x] Sistema de actualizacion via actualizar.bat (descarga codigo desde GitHub).
+- [x] SUBTITULOS funcionando (via Plan B: reparto por texto). Videos completos OK.
+
+## ⚠️ Nota tecnica conocida
+- Edge TTS en el equipo del usuario NO devuelve los tiempos por palabra
+  (WordBoundary vacio), por eso se usa el "Plan B" (subtitulos repartidos de
+  forma pareja). Funciona, pero la sincronizacion no es perfecta palabra a
+  palabra. Pendiente investigar version de edge-tts para lograr sync exacto.
 
 ## ⏳ Pendiente (siguiente paso)
-- [ ] Generar el primer video de prueba real y revisar calidad (guion, voz,
-      imagenes, subtitulos, ritmo).
-- [ ] Ajustar a gusto: estilo de subtitulos, duracion, tono del guion.
-- [ ] (Opcional) Activar avatar D-ID si lo quiere.
+- [ ] Revisar calidad del video con el usuario (guion, voz, imagenes, ritmo).
+- [ ] (Opcional) Lograr subtitulos perfectamente sincronizados (arreglar
+      WordBoundary de edge-tts).
+- [ ] Ajustes de gusto: tamano/estilo subtitulos, musica de fondo, duracion.
+- [ ] (Opcional) Activar avatar D-ID.
+- [ ] (Opcional) Auto-noticias por RSS (como ViroFeed) sin pegar URL.
 - [ ] Definir nicho/tema para la serie de videos.
 
 ## 🗺️ Fases del plan general
