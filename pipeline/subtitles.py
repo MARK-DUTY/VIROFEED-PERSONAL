@@ -25,13 +25,13 @@ SUBTITLE_STYLES = {
 class SubtitleStyle:
     name: str = "amarillo"
     font: str = "Arial Black"
-    font_size: int = 64          # un poco mas grandes que antes (era 54)
+    font_size: int = 88          # bien grandes, estilo viral (era 54, luego 64)
     position: str = "center"     # top | center | bottom
     words_per_group: int = 3
     # Cuanto BAJAR los subtitulos respecto a su posicion base, en pixeles.
-    # El video mide 1920px de alto; ~75px equivale aprox. a 1 cm en pantalla,
-    # asi que 300px equivale aprox. a 4 cm mas abajo.
-    drop_px: int = 300
+    # El video mide 1920px de alto; ~75px equivale aprox. a 1 cm en pantalla.
+    # 525px equivale aprox. a 7 cm mas abajo del centro (4 cm + 3 cm pedidos).
+    drop_px: int = 525
 
 
 def _fmt_time(seconds: float) -> str:
@@ -108,7 +108,7 @@ def build_ass_subtitles(
 ScriptType: v4.00+
 PlayResX: {video_w}
 PlayResY: {video_h}
-WrapStyle: 2
+WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
