@@ -19,6 +19,35 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from werkzeug.utils import secure_filename
 
+
+# --------------------------------------------------------------------------
+#  AUTO-REPARACION: si falta algun archivo nuevo del programa (porque el
+#  actualizar.bat viejo no lo trajo), lo descargamos solos desde GitHub ANTES
+#  de importar el resto. Asi el programa nunca se queda sin abrir por un
+#  archivo faltante.
+# --------------------------------------------------------------------------
+_RAW_BASE = "https://raw.githubusercontent.com/MARK-DUTY/VIROFEED-PERSONAL/main"
+_REQUIRED_FILES = ["pipeline/music.py"]
+
+
+def _self_repair() -> None:
+    import urllib.request
+    here = Path(__file__).resolve().parent
+    for rel in _REQUIRED_FILES:
+        dest = here / rel
+        if dest.exists():
+            continue
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            print(f"[auto-reparacion] falta {rel}, descargandolo desde GitHub...")
+            urllib.request.urlretrieve(f"{_RAW_BASE}/{rel}", str(dest))
+            print(f"[auto-reparacion] listo: {rel}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[auto-reparacion] no pude descargar {rel}: {exc}")
+
+
+_self_repair()
+
 from pipeline.config import settings
 from pipeline.runner import (
     assemble_prepared,
@@ -570,7 +599,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 13 (Musica automatica libre + 3 opciones: dejar/cambiar/apagar)")
+    print("  VERSION DEL CODIGO: 14 (auto-reparacion de archivos faltantes + musica)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)
