@@ -20,7 +20,10 @@ from pathlib import Path
 from typing import Callable
 
 from . import avatar as avatar_mod
-from . import music as music_mod
+try:
+    from . import music as music_mod
+except Exception:  # si falta music.py, el programa sigue funcionando (sin musica automatica)
+    music_mod = None
 from .article import extract_article
 from .assemble import build_video, probe_duration
 from .config import settings
@@ -469,12 +472,14 @@ def assemble_prepared(
     elif mode == "own" and prepared.music_path and Path(prepared.music_path).exists():
         music_file = Path(prepared.music_path)
     else:
-        progress("Preparando la musica de fondo...", 70)
-        try:
-            music_file = music_mod.pick_auto_music()
-        except Exception as exc:  # noqa: BLE001
-            print(f"[musica] no disponible: {exc}")
-            music_file = None
+        music_file = None
+        if music_mod is not None:
+            progress("Preparando la musica de fondo...", 70)
+            try:
+                music_file = music_mod.pick_auto_music()
+            except Exception as exc:  # noqa: BLE001
+                print(f"[musica] no disponible: {exc}")
+                music_file = None
 
     # Ensamblar
     progress("Ensamblando el video final...", 75)
