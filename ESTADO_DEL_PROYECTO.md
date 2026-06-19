@@ -75,9 +75,14 @@ virofeed-personal/
       prompts de imagen EN TEXTO para editarlos/aprobarlos ANTES de generar nada.
       Pestanas "Noticia (URL)" / "Mi historia" en la interfaz. Boton "Reescribir
       mi historia" para volver a generar el guion completo.
-- [x] MUSICA DE FONDO opcional: interruptor (apagado por defecto), area para SUBIR
-      tu propio archivo de musica (lo mas seguro: Biblioteca de audio de YouTube),
-      y control de volumen. La voz siempre manda; la musica va baja con fade out.
+- [x] MUSICA DE FONDO con 3 opciones (interruptor de musica completo):
+      1) AUTOMATICA (por defecto): el programa genera con FFmpeg pistas
+         instrumentales 100% libres de derechos (tonos/acordes, sin samples) y le
+         pone una al azar. Sin descargas, sin riesgo de copyright.
+      2) MI PROPIA MUSICA: el usuario sube su archivo (recomendado: Biblioteca
+         de audio de YouTube).
+      3) SIN MUSICA: el video va solo con la voz.
+      Control de volumen; la voz siempre se escucha por encima (fade out al final).
 
 ## ⚠️ Nota tecnica conocida
 - Edge TTS en el equipo del usuario NO devuelve los tiempos por palabra

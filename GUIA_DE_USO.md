@@ -148,20 +148,31 @@ y el programa la convierte en video.
 
 ---
 
-## 🎵 NUEVO: Música de fondo (opcional)
+## 🎵 NUEVO: Música de fondo (3 opciones)
 
-Por defecto los videos **no llevan música**. Si quieres ponerla:
+Ahora el programa **le pone música automáticamente** a tus videos, pero tú decides.
+En la pantalla de revisión (antes de generar el video final) eliges una de **3 opciones**:
 
-1. En la pantalla de **revisión de imágenes** (antes de generar el video final),
-   activa la casilla **"🎵 Agregar música de fondo"**.
-2. **Sube tu archivo de música** (MP3, WAV, M4A, etc.).
-3. Ajusta el **volumen** (la voz siempre se escucha por encima; la música baja
-   automáticamente y hace *fade out* al final).
+1. **🎵 Automática** *(viene activada por defecto)*: el programa le pone una música
+   instrumental suave. Esta música la **crea el propio programa** con sonidos
+   generados (no es de nadie), así que es **100% libre de derechos de autor** — nunca
+   tendrás un reclamo de copyright.
+2. **⬆️ Mi propia música**: subes tu archivo (MP3, WAV, etc.). Lo más seguro es
+   descargarla de la **Biblioteca de audio de YouTube** (YouTube Studio → Biblioteca
+   de audio).
+3. **🔇 Sin música**: el video va solo con la voz.
 
-### ⚠️ Importante sobre los derechos de autor (copyright)
-- La forma **más segura** de no tener problemas en YouTube/TikTok es usar música de
-  la **Biblioteca de audio de YouTube**: entra a *YouTube Studio → Biblioteca de
-  audio*, descarga una pista gratis y súbela aquí. Esa música está pensada para que
-  **no te caigan reclamos**.
-- También sirven sitios de música **CC0 / dominio público** (como Pixabay Music).
-- Si no subes ninguna música, el video sale **sin música** (100% sin problemas).
+En "Automática" y "Mi propia música" puedes ajustar el **volumen** (la voz siempre se
+escucha por encima; la música baja sola y hace *fade out* al final).
+
+> 💡 La primera vez que generes un video con música automática, el programa tardará
+> unos segundos extra creando las pistas (solo pasa la primera vez; después quedan
+> guardadas).
+
+### ⚠️ Sobre los derechos de autor (copyright)
+- La música **Automática** es generada por el programa → **imposible** que tenga
+  copyright (no usa ninguna grabación de nadie).
+- Si subes tu propia música, usa la **Biblioteca de audio de YouTube** o música
+  **CC0 / dominio público** para no tener problemas.
+- Si eliges **Sin música**, el video sale solo con la voz (100% sin problemas).
+
