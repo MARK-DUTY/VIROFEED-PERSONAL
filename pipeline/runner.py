@@ -24,7 +24,7 @@ from .article import extract_article
 from .assemble import build_video, probe_duration
 from .config import settings
 from .images import ImageResult, fetch_scene_images, fetch_single_image
-from .script_gen import Scene, generate_script
+from .script_gen import Scene, generate_script, generate_script_from_story
 from .subtitles import SubtitleStyle, build_ass_subtitles, build_subtitles_from_text
 from .voice import WordTiming, synthesize_voice
 
@@ -84,10 +84,10 @@ class PreparedJob:
     title: str
     narration: str
     scenes: list[Scene]
-    images: list[ImageResult]          # una por escena (editable por el usuario)
-    audio_path: Path
-    audio_words: list[WordTiming]
-    real_duration: float
+    images: list[ImageResult] = field(default_factory=list)  # una por escena (editable)
+    audio_path: Path | None = None
+    audio_words: list[WordTiming] = field(default_factory=list)
+    real_duration: float = 0.0
     titles: list[str] = field(default_factory=list)
     hashtags: list[str] = field(default_factory=list)
     image_source: str = "hybrid"
@@ -95,6 +95,8 @@ class PreparedJob:
     voice: str = "es-MX-JorgeNeural"
     rate: str = "+0%"
     synth_narration: str = ""           # narracion con la que se genero el audio actual
+    # Musica de fondo opcional (la sube el usuario). None = sin musica.
+    music_path: Path | None = None
 
     def current_narration(self) -> str:
         """La narracion actual = union de los textos de las escenas (tras editar)."""
@@ -194,6 +196,123 @@ def prepare_video(
 
 
 # ==========================================================================
+#  MODO HISTORIA - PASO A: crear el BORRADOR (guion + prompts, SIN imagenes)
+# ==========================================================================
+def draft_story(
+    story: str,
+    *,
+    duration: int | None = None,
+    n_images: int = 8,
+    voice: str | None = None,
+    rate: str | None = None,
+    cta: str | None = None,
+    image_source: str | None = None,
+    progress: ProgressFn = _noop,
+) -> PreparedJob:
+    """
+    Convierte la HISTORIA del usuario en un guion dividido en escenas con su
+    prompt de imagen, PERO todavia NO genera imagenes ni voz.
+
+    Devuelve un PreparedJob "borrador" para que el usuario revise y edite los
+    prompts (y el dialogo) antes de gastar tiempo generando nada.
+    """
+    cfg = settings
+    duration = duration or cfg.video_duration
+    voice = _resolve_voice(voice or cfg.tts_voice)
+    rate = rate if rate is not None else cfg.tts_rate
+    cta = cta or cfg.call_to_action
+    image_source = (image_source or cfg.image_source or "hybrid").lower()
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    job_dir = cfg.work_dir / f"job_{stamp}"
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    progress("Escribiendo el guion y los prompts con IA...", 40)
+    script = generate_script_from_story(
+        story, duration=duration, n_images=n_images, cta=cta
+    )
+    print(f"[historia] {len(script.scenes)} escenas/prompts generados")
+
+    # Titulo amigable: el primero sugerido o las primeras palabras de la historia
+    title = (script.titles[0] if script.titles else "").strip()
+    if not title:
+        title = " ".join(story.strip().split()[:8]) or "Mi historia"
+
+    progress("Borrador listo para revisar!", 100)
+
+    return PreparedJob(
+        job_dir=job_dir,
+        title=title,
+        narration=script.narration,
+        scenes=script.scenes,
+        images=[],                 # aun no hay imagenes (se generan al aprobar)
+        audio_path=None,           # aun no hay voz
+        audio_words=[],
+        real_duration=float(duration),
+        titles=script.titles,
+        hashtags=script.hashtags,
+        image_source=image_source,
+        voice=voice,
+        rate=rate,
+        synth_narration="",
+    )
+
+
+# ==========================================================================
+#  Editar el PROMPT de imagen de una escena (en el borrador)
+# ==========================================================================
+def update_scene_prompt(prepared: PreparedJob, index: int, new_prompt: str) -> None:
+    """Cambia la descripcion de imagen (image_prompt) de una escena."""
+    if index < 0 or index >= len(prepared.scenes):
+        raise ValueError("Escena fuera de rango.")
+    prompt = (new_prompt or "").strip()
+    if not prompt:
+        raise ValueError("La descripcion de la imagen no puede quedar vacia.")
+    prepared.scenes[index].image_prompt = prompt
+
+
+# ==========================================================================
+#  MODO HISTORIA - PASO B: generar VOZ + IMAGENES desde el borrador aprobado
+# ==========================================================================
+def prepare_from_draft(
+    prepared: PreparedJob,
+    *,
+    progress: ProgressFn = _noop,
+) -> PreparedJob:
+    """
+    Con los prompts y dialogos ya aprobados por el usuario, genera la VOZ y las
+    IMAGENES. Despues el flujo continua igual que el modo noticia (revision de
+    imagenes -> ensamblar video final).
+    """
+    cfg = settings
+    job_dir = prepared.job_dir
+    images_dir = job_dir / "images"
+
+    narration = prepared.current_narration()
+
+    # 1) Voz
+    progress("Generando la voz en espanol...", 35)
+    audio = synthesize_voice(
+        narration, voice=prepared.voice, rate=prepared.rate, out_path=job_dir / "voz.mp3"
+    )
+    prepared.audio_path = audio.audio_path
+    prepared.audio_words = audio.words
+    prepared.real_duration = probe_duration(audio.audio_path) or audio.duration or prepared.real_duration
+    prepared.narration = narration
+    prepared.synth_narration = narration
+
+    # 2) Imagenes por escena
+    progress(f"Generando imagenes ({prepared.image_source})...", 60)
+    images = fetch_scene_images(
+        prepared.scenes, images_dir, source=prepared.image_source, progress=progress
+    )
+    prepared.images = images
+
+    progress("Listo para revisar imagenes!", 100)
+    return prepared
+
+
+# ==========================================================================
 #  Regenerar / reemplazar la imagen de UNA escena
 # ==========================================================================
 def regenerate_scene_image(
@@ -290,6 +409,7 @@ def assemble_prepared(
     subtitle_color: str = "amarillo",
     subtitle_position: str = "center",
     use_avatar: bool = False,
+    music_volume: float = 0.15,
     progress: ProgressFn = _noop,
 ) -> VideoJobResult:
     cfg = settings
@@ -351,6 +471,8 @@ def assemble_prepared(
         avatar_video=avatar_video,
         target_duration=prepared.real_duration,
         image_durations=img_durations,
+        music_path=prepared.music_path if prepared.music_path and Path(prepared.music_path).exists() else None,
+        music_volume=music_volume,
     )
 
     progress("Listo!", 100)

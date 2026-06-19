@@ -118,3 +118,50 @@ Si quieres el avatar hablando:
 | Avatar (D-ID) | Gratis con límite mensual |
 
 **Total en modo faceless: $0** 🎉
+
+
+
+---
+
+## ✍️ NUEVO: Modo Historia (crea un video desde tu propia historia)
+
+Ya no solo funciona con URLs de noticias. Ahora puedes **escribir tu propia historia**
+y el programa la convierte en video.
+
+**Cómo se usa:**
+1. En la página principal, arriba hay dos pestañas: **📰 Noticia (URL)** y **✍️ Mi historia**.
+2. Entra a **✍️ Mi historia** y escribe tu historia con todos los detalles que
+   quieras que aparezcan (mientras más detalle, mejores imágenes).
+3. Elige el **número de imágenes** (mínimo 8) y la duración.
+4. Pulsa **"✍️ Generar guion y prompts"**.
+5. El programa te muestra el **guion dividido en escenas** y, por cada escena, el
+   **prompt de la imagen** (en inglés). Puedes:
+   - ✏️ Editar el **diálogo** (lo que se narra).
+   - 🎨 Editar el **prompt** de cualquier imagen.
+   - ✍️ Pulsar **"Reescribir mi historia"** si quieres cambiarla por completo.
+6. Cuando te gusten, pulsa **"🎨 Generar voz e imágenes"**.
+7. Te lleva a la pantalla de siempre para revisar/regenerar las imágenes y, por
+   último, **generar el video final**.
+
+> 💡 La ventaja del Modo Historia: **apruebas los prompts antes** de que el programa
+> gaste tiempo generando imágenes.
+
+---
+
+## 🎵 NUEVO: Música de fondo (opcional)
+
+Por defecto los videos **no llevan música**. Si quieres ponerla:
+
+1. En la pantalla de **revisión de imágenes** (antes de generar el video final),
+   activa la casilla **"🎵 Agregar música de fondo"**.
+2. **Sube tu archivo de música** (MP3, WAV, M4A, etc.).
+3. Ajusta el **volumen** (la voz siempre se escucha por encima; la música baja
+   automáticamente y hace *fade out* al final).
+
+### ⚠️ Importante sobre los derechos de autor (copyright)
+- La forma **más segura** de no tener problemas en YouTube/TikTok es usar música de
+  la **Biblioteca de audio de YouTube**: entra a *YouTube Studio → Biblioteca de
+  audio*, descarga una pista gratis y súbela aquí. Esa música está pensada para que
+  **no te caigan reclamos**.
+- También sirven sitios de música **CC0 / dominio público** (como Pixabay Music).
+- Si no subes ninguna música, el video sale **sin música** (100% sin problemas).

@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 
 const formCard = $("form-card");
 const progressCard = $("progress-card");
+const draftCard = $("draft-card");
 const reviewCard = $("review-card");
 const resultCard = $("result-card");
 const errorCard = $("error-card");
@@ -17,11 +18,27 @@ const progressTitle = $("progress-title");
 let pollTimer = null;
 let currentJob = null;       // job_id actual
 let imageSourceChosen = "hybrid";
+let activeTab = "url";        // "url" | "story"
 const attempts = {};          // cuenta de regeneraciones por escena
 
 function show(card) {
-  [formCard, progressCard, reviewCard, resultCard, errorCard].forEach((c) => c.classList.add("hidden"));
+  [formCard, progressCard, draftCard, reviewCard, resultCard, errorCard].forEach((c) => c.classList.add("hidden"));
   card.classList.remove("hidden");
+}
+
+// ----------------------------------------------------------------------
+//  Pestanas: Noticia (URL) / Mi historia
+// ----------------------------------------------------------------------
+function switchTab(tab) {
+  activeTab = tab;
+  $("tab-btn-url").classList.toggle("active", tab === "url");
+  $("tab-btn-story").classList.toggle("active", tab === "story");
+  $("tab-url").classList.toggle("hidden", tab !== "url");
+  $("tab-story").classList.toggle("hidden", tab !== "story");
+  // El estilo de guion solo aplica al modo noticia
+  $("style-field").style.display = tab === "url" ? "" : "none";
+  // El boton cambia segun el modo
+  generateBtn.textContent = tab === "url" ? "🎬 Preparar video" : "✍️ Generar guion y prompts";
 }
 
 function setProgress(pct, msg) {
@@ -29,19 +46,10 @@ function setProgress(pct, msg) {
   if (msg) progressMsg.textContent = msg;
 }
 
-// ----------------------------------------------------------------------
-//  PASO 1: preparar
-// ----------------------------------------------------------------------
-async function startPrepare() {
-  const url = $("url").value.trim();
-  if (!url) {
-    alert("Pega la URL de una noticia primero.");
-    return;
-  }
-
+// Opciones compartidas (duracion, voz, subtitulos, etc.) para ambos modos
+function sharedOptions() {
   imageSourceChosen = $("image_source").value;
-  const payload = {
-    url,
+  return {
     duration: $("duration").value,
     style: $("style").value,
     voice: $("voice").value,
@@ -51,6 +59,28 @@ async function startPrepare() {
     cta: $("cta").value,
     use_avatar: $("use_avatar").checked,
   };
+}
+
+// El boton principal decide segun la pestana activa
+function onGenerate() {
+  if (activeTab === "story") {
+    startDraft();
+  } else {
+    startPrepare();
+  }
+}
+
+// ----------------------------------------------------------------------
+//  PASO 1 (URL): preparar
+// ----------------------------------------------------------------------
+async function startPrepare() {
+  const url = $("url").value.trim();
+  if (!url) {
+    alert("Pega la URL de una noticia primero.");
+    return;
+  }
+
+  const payload = { url, ...sharedOptions() };
 
   generateBtn.disabled = true;
   progressTitle.textContent = "Preparando tu video...";
@@ -59,6 +89,42 @@ async function startPrepare() {
 
   try {
     const resp = await fetch("/api/prepare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { showError(data.error || "Error desconocido"); return; }
+    currentJob = data.job_id;
+    pollStatus();
+  } catch (e) {
+    showError("No pude contactar al programa. ¿Sigue abierta la ventana negra?\n" + e);
+  }
+}
+
+// ----------------------------------------------------------------------
+//  MODO HISTORIA - PASO A: crear el borrador (guion + prompts)
+// ----------------------------------------------------------------------
+async function startDraft() {
+  const story = $("story").value.trim();
+  if (story.length < 30) {
+    alert("Escribe tu historia con un poco mas de detalle (al menos unas frases).");
+    return;
+  }
+
+  const payload = {
+    story,
+    n_images: $("n_images").value,
+    ...sharedOptions(),
+  };
+
+  generateBtn.disabled = true;
+  progressTitle.textContent = "Escribiendo el guion y los prompts...";
+  show(progressCard);
+  setProgress(5, "Iniciando...");
+
+  try {
+    const resp = await fetch("/api/draft_story", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -88,6 +154,11 @@ function pollStatus() {
         showError(job.error || "Error durante el proceso");
         return;
       }
+      if (job.phase === "draft" && job.status === "draft_ready") {
+        clearInterval(pollTimer);
+        renderDraft(job.draft);
+        return;
+      }
       if (job.phase === "review" && job.status === "ready") {
         clearInterval(pollTimer);
         renderReview(job.review);
@@ -103,6 +174,80 @@ function pollStatus() {
       showError("Se perdio la conexion con el programa.\n" + e);
     }
   }, 1500);
+}
+
+// ----------------------------------------------------------------------
+//  MODO HISTORIA - Pantalla de borrador (guion + prompts editables)
+// ----------------------------------------------------------------------
+function renderDraft(draft) {
+  generateBtn.disabled = false;
+  const grid = $("draft-grid");
+  grid.innerHTML = "";
+
+  draft.scenes.forEach((scene) => {
+    const card = document.createElement("div");
+    card.className = "draft-scene";
+    card.innerHTML = `
+      <div class="draft-head">
+        <span class="draft-num">Escena ${scene.index + 1}</span>
+        <span class="scene-saved hidden" id="dsaved-${scene.index}">✔ Guardado</span>
+      </div>
+      <label class="scene-label">🎬 Diálogo (lo que se narra)</label>
+      <textarea class="scene-dialogue" id="dtext-${scene.index}" rows="2">${escapeHtml(scene.text)}</textarea>
+      <label class="scene-label">🖼️ Prompt de la imagen (en inglés)</label>
+      <textarea class="scene-prompt" id="dprompt-${scene.index}" rows="3">${escapeHtml(scene.image_prompt)}</textarea>
+    `;
+    grid.appendChild(card);
+  });
+
+  // Guardar automaticamente cuando el usuario termina de editar
+  grid.querySelectorAll(".scene-dialogue, .scene-prompt").forEach((ta) => {
+    const i = parseInt(ta.id.split("-")[1], 10);
+    ta.addEventListener("change", () => saveDraftScene(i));
+  });
+
+  show(draftCard);
+}
+
+async function saveDraftScene(i) {
+  const text = $(`dtext-${i}`).value.trim();
+  const prompt = $(`dprompt-${i}`).value.trim();
+  if (!prompt) { alert("La descripción de la imagen no puede quedar vacía."); return; }
+  try {
+    const resp = await fetch("/api/update_prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: currentJob, index: i, prompt, text }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert(data.error || "No se pudo guardar"); return; }
+    const saved = $(`dsaved-${i}`);
+    if (saved) {
+      saved.classList.remove("hidden");
+      setTimeout(() => saved.classList.add("hidden"), 1500);
+    }
+  } catch (e) {
+    alert("Error al guardar: " + e);
+  }
+}
+
+// Aprobar el borrador -> generar voz + imagenes
+async function generateFromDraft() {
+  progressTitle.textContent = "Generando voz e imágenes...";
+  show(progressCard);
+  setProgress(5, "Iniciando...");
+  try {
+    const resp = await fetch("/api/generate_from_draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: currentJob }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { showError(data.error || "Error al generar"); return; }
+    pollStatus();
+  } catch (e) {
+    showError("No pude contactar al programa.\n" + e);
+  }
 }
 
 // ----------------------------------------------------------------------
@@ -257,17 +402,71 @@ async function uploadImage(i, file) {
 }
 
 // ----------------------------------------------------------------------
+//  Musica de fondo (opcional)
+// ----------------------------------------------------------------------
+function setupMusicControls() {
+  const enabled = $("music-enabled");
+  const controls = $("music-controls");
+  const fileInput = $("music-file");
+  const vol = $("music-volume");
+  const volLabel = $("music-vol-label");
+  const status = $("music-status");
+
+  enabled.addEventListener("change", async () => {
+    controls.classList.toggle("hidden", !enabled.checked);
+    if (!enabled.checked) {
+      // Quitar la musica del trabajo
+      fileInput.value = "";
+      status.textContent = "";
+      try {
+        await fetch("/api/remove_music", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ job_id: currentJob }),
+        });
+      } catch (e) { /* sin problema */ }
+    }
+  });
+
+  vol.addEventListener("input", () => { volLabel.textContent = vol.value + "%"; });
+
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    status.textContent = "Subiendo música...";
+    try {
+      const fd = new FormData();
+      fd.append("job_id", currentJob);
+      fd.append("music", file);
+      const resp = await fetch("/api/upload_music", { method: "POST", body: fd });
+      const data = await resp.json();
+      if (!resp.ok) { status.textContent = "❌ " + (data.error || "No se pudo subir"); return; }
+      status.textContent = "✔ Música lista: " + data.music_file;
+    } catch (e) {
+      status.textContent = "❌ Error al subir la música.";
+    }
+  });
+}
+
+// ----------------------------------------------------------------------
 //  PASO 2: ensamblar el video final
 // ----------------------------------------------------------------------
 async function startAssemble() {
   progressTitle.textContent = "Generando el video final...";
   show(progressCard);
   setProgress(5, "Preparando ensamblaje...");
+
+  // Si el usuario activo la musica, mandamos el volumen elegido (0.0 a 1.0)
+  const payload = { job_id: currentJob };
+  if ($("music-enabled").checked) {
+    payload.music_volume = parseInt($("music-volume").value, 10) / 100;
+  }
+
   try {
     const resp = await fetch("/api/assemble", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: currentJob }),
+      body: JSON.stringify(payload),
     });
     const data = await resp.json();
     if (!resp.ok) { showError(data.error || "Error al ensamblar"); return; }
@@ -313,8 +512,15 @@ function escapeHtml(s) {
 // ----------------------------------------------------------------------
 //  Eventos
 // ----------------------------------------------------------------------
-generateBtn.addEventListener("click", startPrepare);
+$("tab-btn-url").addEventListener("click", () => switchTab("url"));
+$("tab-btn-story").addEventListener("click", () => switchTab("story"));
+
+generateBtn.addEventListener("click", onGenerate);
 assembleBtn.addEventListener("click", startAssemble);
+$("generate-draft-btn").addEventListener("click", generateFromDraft);
+$("redraft-btn").addEventListener("click", () => { switchTab("story"); show(formCard); });
 $("cancel-review-btn").addEventListener("click", () => show(formCard));
 $("new-btn").addEventListener("click", () => show(formCard));
 $("retry-btn").addEventListener("click", () => show(formCard));
+
+setupMusicControls();

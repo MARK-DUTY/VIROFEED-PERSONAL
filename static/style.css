@@ -252,3 +252,95 @@ footer { text-align: center; color: var(--muted); margin-top: 30px; font-size: 0
 .btn-mini:disabled { opacity: .45; cursor: not-allowed; }
 
 #cancel-review-btn { width: 100%; }
+
+
+/* ---- Pestanas: Noticia (URL) / Mi historia ---- */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  background: var(--card-2);
+  padding: 6px;
+  border-radius: 12px;
+}
+.tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 11px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #fff;
+}
+
+/* Area de texto general (historia y campos largos) */
+textarea {
+  background: var(--card-2);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text);
+  padding: 13px 14px;
+  border-radius: 12px;
+  font-size: 1rem;
+  outline: none;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  transition: border .15s;
+}
+textarea:focus { border-color: var(--accent); }
+
+/* ---- Pantalla de borrador (guion + prompts) ---- */
+.draft-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 18px 0 22px;
+}
+.draft-scene {
+  background: var(--card-2);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.draft-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.draft-num {
+  font-weight: 800;
+  color: var(--accent-2);
+  font-size: 0.9rem;
+}
+
+/* ---- Caja de musica de fondo ---- */
+.music-box {
+  background: var(--card-2);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 16px;
+  margin: 6px 0 18px;
+}
+.music-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.music-toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+.music-toggle span { font-weight: 700; color: var(--text); }
+.music-controls { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.music-controls input[type="file"] { color: var(--muted); font-size: 0.85rem; }
+.music-controls input[type="range"] { width: 100%; accent-color: var(--accent); }
+.music-status { font-size: 0.82rem; color: var(--ok); min-height: 1em; }

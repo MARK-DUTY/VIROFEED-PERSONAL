@@ -70,6 +70,14 @@ virofeed-personal/
       una por escena y sincronizadas con la narracion. Selector en la interfaz.
 - [x] REVISION DE IMAGENES (flujo 2 pasos como editor de ViroFeed): Preparar ->
       revisar/regenerar/subir imagenes por escena -> Generar video final.
+- [x] MODO HISTORIA (Opcion B): ademas de URL, el usuario puede escribir su propia
+      historia. La IA la divide en escenas (minimo 8) y muestra el guion + los
+      prompts de imagen EN TEXTO para editarlos/aprobarlos ANTES de generar nada.
+      Pestanas "Noticia (URL)" / "Mi historia" en la interfaz. Boton "Reescribir
+      mi historia" para volver a generar el guion completo.
+- [x] MUSICA DE FONDO opcional: interruptor (apagado por defecto), area para SUBIR
+      tu propio archivo de musica (lo mas seguro: Biblioteca de audio de YouTube),
+      y control de volumen. La voz siempre manda; la musica va baja con fade out.
 
 ## ⚠️ Nota tecnica conocida
 - Edge TTS en el equipo del usuario NO devuelve los tiempos por palabra
@@ -78,10 +86,11 @@ virofeed-personal/
   palabra. Pendiente investigar version de edge-tts para lograr sync exacto.
 
 ## ⏳ Pendiente (siguiente paso)
+- [ ] Probar el MODO HISTORIA y la MUSICA en el Windows del usuario (recien agregados).
 - [ ] Revisar calidad del video con el usuario (guion, voz, imagenes, ritmo).
 - [ ] (Opcional) Lograr subtitulos perfectamente sincronizados (arreglar
       WordBoundary de edge-tts).
-- [ ] Ajustes de gusto: tamano/estilo subtitulos, musica de fondo, duracion.
+- [ ] (Opcional) Biblioteca de musica CC0 incluida en el programa (ademas de subir la propia).
 - [ ] (Opcional) Activar avatar D-ID.
 - [ ] (Opcional) Auto-noticias por RSS (como ViroFeed) sin pegar URL.
 - [ ] Definir nicho/tema para la serie de videos.

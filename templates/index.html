@@ -9,7 +9,7 @@
 <body>
   <header>
     <h1>🎬 ViroFeed <span>AI Personal</span></h1>
-    <p class="subtitle">Pega la URL de una noticia y crea un video viral automaticamente</p>
+    <p class="subtitle">Crea un video viral desde una noticia (URL) o desde tu propia historia</p>
   </header>
 
   {% if missing_keys %}
@@ -25,10 +25,35 @@
 
   <main>
     <section class="card" id="form-card">
-      <label class="field">
-        <span>URL de la noticia</span>
-        <input type="url" id="url" placeholder="https://www.ejemplo.com/noticia..." autofocus>
-      </label>
+      <!-- Pestanas: Noticia (URL) / Mi historia -->
+      <div class="tabs">
+        <button class="tab active" id="tab-btn-url" data-tab="url">📰 Noticia (URL)</button>
+        <button class="tab" id="tab-btn-story" data-tab="story">✍️ Mi historia</button>
+      </div>
+
+      <!-- Panel: URL -->
+      <div class="tab-panel" id="tab-url">
+        <label class="field">
+          <span>URL de la noticia</span>
+          <input type="url" id="url" placeholder="https://www.ejemplo.com/noticia..." autofocus>
+        </label>
+      </div>
+
+      <!-- Panel: Historia -->
+      <div class="tab-panel hidden" id="tab-story">
+        <label class="field">
+          <span>Tu historia (escribe todos los detalles que quieres que aparezcan)</span>
+          <textarea id="story" rows="7" placeholder="Ejemplo: Cuenta la historia de un perro callejero que un dia rescato a un nino perdido en la ciudad. Describe el barrio, el momento del rescate, como la gente reacciono y el final feliz cuando una familia lo adopta..."></textarea>
+        </label>
+        <label class="field">
+          <span>Numero de imagenes (minimo 8)</span>
+          <select id="n_images">
+            <option value="8" selected>8 imagenes</option>
+            <option value="10">10 imagenes</option>
+            <option value="12">12 imagenes</option>
+          </select>
+        </label>
+      </div>
 
       <div class="row">
         <label class="field">
@@ -40,8 +65,8 @@
           </select>
         </label>
 
-        <label class="field">
-          <span>Estilo del guion</span>
+        <label class="field" id="style-field">
+          <span>Estilo del guion (solo noticia)</span>
           <select id="style">
             <option value="breaking" {% if defaults.style=='breaking' %}selected{% endif %}>Ultimo minuto</option>
             <option value="resumen" {% if defaults.style=='resumen' %}selected{% endif %}>Resumen rapido</option>
@@ -123,11 +148,38 @@
       <p class="hint">Esto puede tardar entre 1 y 6 minutos. No cierres la ventana.</p>
     </section>
 
+    <section class="card hidden" id="draft-card">
+      <h2>📝 Revisa el guion y los prompts</h2>
+      <p class="hint">La IA dividio tu historia en escenas. Para cada una puedes editar el <strong>diálogo</strong> (lo que se narra) y el <strong>prompt de la imagen</strong>. Cuando te gusten, genera la voz y las imágenes.</p>
+      <p class="hint">💡 ¿No te convence? Puedes <strong>reescribir tu historia</strong> y volver a generar el guion completo.</p>
+      <div id="draft-grid" class="draft-grid"></div>
+      <button id="generate-draft-btn" class="btn-primary">🎨 Generar voz e imágenes</button>
+      <button id="redraft-btn" class="btn-secondary">✍️ Reescribir mi historia</button>
+    </section>
+
     <section class="card hidden" id="review-card">
       <h2>🖼️ Revisa y aprueba antes de armar el video</h2>
       <p class="hint">Para cada escena puedes: ✏️ editar el <strong>diálogo</strong>, 🎨 regenerar la imagen, ⬆️ subir una imagen desde tu PC, o 🗑️ eliminar la escena. Cuando todo te guste, genera el video.</p>
       <p class="hint" id="dialogue-note">💡 Si editas algún diálogo o eliminas escenas, la voz y los subtítulos se regeneran solos al generar el video.</p>
       <div id="scenes-grid" class="scenes-grid"></div>
+
+      <!-- Musica de fondo (opcional) -->
+      <div class="music-box">
+        <label class="checkbox music-toggle">
+          <input type="checkbox" id="music-enabled">
+          <span>🎵 Agregar música de fondo (opcional)</span>
+        </label>
+        <div id="music-controls" class="music-controls hidden">
+          <p class="hint">Sube tu archivo de música. Lo más seguro contra derechos de autor: descárgala de la <strong>Biblioteca de audio de YouTube</strong> (YouTube Studio → Biblioteca de audio).</p>
+          <input type="file" accept="audio/*" id="music-file">
+          <p class="music-status" id="music-status"></p>
+          <label class="field">
+            <span>Volumen de la música: <strong id="music-vol-label">15%</strong> (la voz siempre manda)</span>
+            <input type="range" id="music-volume" min="2" max="40" value="15">
+          </label>
+        </div>
+      </div>
+
       <button id="assemble-btn" class="btn-primary">✅ Generar video final</button>
       <button id="cancel-review-btn" class="btn-secondary">← Empezar de nuevo</button>
     </section>

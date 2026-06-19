@@ -126,6 +126,8 @@ def build_video(
     avatar_video: Path | None = None,
     target_duration: float | None = None,
     image_durations: list[float] | None = None,
+    music_path: Path | None = None,
+    music_volume: float = 0.15,
 ) -> AssembleResult:
     """
     Ensambla el video final y lo guarda en out_path.
@@ -137,6 +139,8 @@ def build_video(
     avatar_video    : video del avatar para superponer en esquina (opcional)
     image_durations : duracion (segundos) de cada imagen, para sincronizar cada
                       imagen con su escena. Si es None, se reparte por igual.
+    music_path      : musica de fondo opcional (la voz manda; la musica va baja).
+    music_volume    : volumen de la musica (0.0 a 1.0). La voz se mantiene a 1.0.
     """
     ffmpeg = find_ffmpeg()
     work_dir = Path(work_dir)
@@ -202,6 +206,13 @@ def build_video(
         inputs += ["-i", str(Path(avatar_video).resolve())]
         avatar_idx = next_idx
         next_idx += 1
+    # Musica de fondo (opcional). -stream_loop -1 hace que se repita si es mas
+    # corta que el video; luego amix con duration=first la corta al terminar la voz.
+    music_idx = None
+    if music_path and Path(music_path).exists():
+        inputs += ["-stream_loop", "-1", "-i", str(Path(music_path).resolve())]
+        music_idx = next_idx
+        next_idx += 1
 
     # Construimos la cadena de filtros paso a paso
     filters = []
@@ -224,14 +235,27 @@ def build_video(
         filters.append(f"[{last}]ass=subtitles.ass[vsub]")
         last = "vsub"
 
+    # Mapa del video: con corchetes solo si hubo filtros de video
+    video_map = f"[{last}]" if filters else "0:v"
+
+    # --- Audio: voz sola, o voz + musica de fondo mezclada ---
+    audio_map = "1:a"
+    if music_idx is not None:
+        vol = max(0.0, min(1.0, float(music_volume)))
+        fade_start = max(0.1, duration - 2.0)
+        # La musica va a bajo volumen con fade out; la voz se mantiene a tope.
+        filters.append(
+            f"[{music_idx}:a]volume={vol:.3f},afade=t=out:st={fade_start:.2f}:d=2[bgm]"
+        )
+        filters.append(
+            "[1:a][bgm]amix=inputs=2:duration=first:dropout_transition=3:normalize=0[aout]"
+        )
+        audio_map = "[aout]"
+
     cmd = [ffmpeg, "-y", *inputs]
     if filters:
-        cmd += ["-filter_complex", ";".join(filters), "-map", f"[{last}]"]
-    else:
-        cmd += ["-map", "0:v"]
-
-    # Mapear el audio: si hay avatar con su propia voz, igual usamos la voz TTS
-    cmd += ["-map", "1:a"]
+        cmd += ["-filter_complex", ";".join(filters)]
+    cmd += ["-map", video_map, "-map", audio_map]
     cmd += [
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
         "-c:a", "aac", "-b:a", "192k",
