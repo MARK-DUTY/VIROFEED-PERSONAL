@@ -23,9 +23,12 @@ from pipeline.config import settings
 from pipeline.runner import (
     assemble_prepared,
     delete_scene,
+    draft_story,
+    prepare_from_draft,
     prepare_video,
     regenerate_scene_image,
     set_scene_image,
+    update_scene_prompt,
     update_scene_text,
 )
 from pipeline.voice import list_spanish_voices
@@ -84,6 +87,26 @@ def _review_payload(job_id: str) -> dict:
         "titles": prepared.titles,
         "hashtags": prepared.hashtags,
         "duration": round(prepared.real_duration, 1),
+        "scenes": scenes,
+    }
+
+
+def _draft_payload(job_id: str) -> dict:
+    """Lista de escenas del BORRADOR (texto + prompt, sin imagenes todavia)."""
+    job = JOBS[job_id]
+    prepared = job["prepared"]
+    scenes = []
+    for i, scene in enumerate(prepared.scenes):
+        scenes.append({
+            "index": i,
+            "text": scene.text,
+            "image_prompt": scene.image_prompt,
+        })
+    return {
+        "job_id": job_id,
+        "title": prepared.title,
+        "titles": prepared.titles,
+        "hashtags": prepared.hashtags,
         "scenes": scenes,
     }
 
@@ -151,6 +174,174 @@ def _run_prepare(job_id: str, url: str, options: dict) -> None:
         traceback.print_exc()
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"] = str(exc)
+
+
+# --------------------------------------------------------------------------
+#  MODO HISTORIA - PASO A: crear el borrador (guion + prompts, sin imagenes)
+# --------------------------------------------------------------------------
+@app.route("/api/draft_story", methods=["POST"])
+def api_draft_story():
+    data = request.get_json(force=True) or {}
+    story = (data.get("story") or "").strip()
+    if not story:
+        return jsonify({"error": "Escribe tu historia primero."}), 400
+
+    fresh = settings.reload()
+    if "GROQ_API_KEY" in fresh.missing_keys():
+        return jsonify({"error": "Falta la clave GROQ_API_KEY en tu archivo .env"}), 400
+
+    job_id = uuid.uuid4().hex[:12]
+    options = {
+        "duration": int(data.get("duration") or fresh.video_duration),
+        "n_images": max(8, int(data.get("n_images") or 8)),
+        "style": fresh.script_style,
+        "voice": data.get("voice") or fresh.tts_voice,
+        "rate": data.get("rate") if data.get("rate") is not None else fresh.tts_rate,
+        "cta": data.get("cta") or fresh.call_to_action,
+        "image_source": data.get("image_source") or fresh.image_source,
+        "subtitle_color": data.get("subtitle_color") or "amarillo",
+        "subtitle_position": data.get("subtitle_position") or "center",
+        "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
+        "music_volume": float(data.get("music_volume") or 0.15),
+    }
+    JOBS[job_id] = {
+        "status": "running", "phase": "drafting", "message": "Iniciando...",
+        "percent": 0, "error": None, "prepared": None, "options": options,
+        "draft": None, "review": None, "result": None,
+    }
+
+    threading.Thread(target=_run_draft, args=(job_id, story, options), daemon=True).start()
+    return jsonify({"job_id": job_id})
+
+
+def _run_draft(job_id: str, story: str, options: dict) -> None:
+    def progress(msg: str, pct: int) -> None:
+        JOBS[job_id]["message"] = msg
+        JOBS[job_id]["percent"] = pct
+
+    try:
+        prepared = draft_story(
+            story,
+            duration=options["duration"],
+            n_images=options["n_images"],
+            voice=options["voice"],
+            rate=options["rate"],
+            cta=options["cta"],
+            image_source=options["image_source"],
+            progress=progress,
+        )
+        JOBS[job_id]["prepared"] = prepared
+        JOBS[job_id]["phase"] = "draft"
+        JOBS[job_id]["status"] = "draft_ready"
+        JOBS[job_id]["percent"] = 100
+        JOBS[job_id]["message"] = "Borrador listo para revisar"
+        JOBS[job_id]["draft"] = _draft_payload(job_id)
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc()
+        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["error"] = str(exc)
+
+
+# --------------------------------------------------------------------------
+#  Editar el prompt de imagen de una escena (en el borrador)
+# --------------------------------------------------------------------------
+@app.route("/api/update_prompt", methods=["POST"])
+def api_update_prompt():
+    data = request.get_json(force=True) or {}
+    job_id = data.get("job_id")
+    job = JOBS.get(job_id)
+    if not job or not job.get("prepared"):
+        return jsonify({"error": "Trabajo no encontrado o expirado."}), 404
+    try:
+        index = int(data.get("index"))
+        prompt = data.get("prompt") or ""
+        update_scene_prompt(job["prepared"], index, prompt)
+        # Si el usuario edito el dialogo en el borrador tambien, lo guardamos
+        if data.get("text") is not None:
+            update_scene_text(job["prepared"], index, data.get("text") or "")
+        job["draft"] = _draft_payload(job_id)
+        return jsonify({"ok": True})
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"error": str(exc)}), 400
+
+
+# --------------------------------------------------------------------------
+#  MODO HISTORIA - PASO B: generar voz + imagenes desde el borrador aprobado
+# --------------------------------------------------------------------------
+@app.route("/api/generate_from_draft", methods=["POST"])
+def api_generate_from_draft():
+    data = request.get_json(force=True) or {}
+    job_id = data.get("job_id")
+    job = JOBS.get(job_id)
+    if not job or not job.get("prepared"):
+        return jsonify({"error": "Trabajo no encontrado o expirado."}), 404
+
+    job["phase"] = "preparing"
+    job["status"] = "running"
+    job["percent"] = 0
+    job["message"] = "Generando voz e imagenes..."
+    threading.Thread(target=_run_generate_from_draft, args=(job_id,), daemon=True).start()
+    return jsonify({"job_id": job_id})
+
+
+def _run_generate_from_draft(job_id: str) -> None:
+    job = JOBS[job_id]
+
+    def progress(msg: str, pct: int) -> None:
+        job["message"] = msg
+        job["percent"] = pct
+
+    try:
+        prepare_from_draft(job["prepared"], progress=progress)
+        job["phase"] = "review"
+        job["status"] = "ready"
+        job["percent"] = 100
+        job["message"] = "Listo para revisar"
+        job["review"] = _review_payload(job_id)
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc()
+        job["status"] = "error"
+        job["error"] = str(exc)
+
+
+# --------------------------------------------------------------------------
+#  Subir musica de fondo (opcional) para el video
+# --------------------------------------------------------------------------
+@app.route("/api/upload_music", methods=["POST"])
+def api_upload_music():
+    job_id = request.form.get("job_id")
+    job = JOBS.get(job_id)
+    if not job or not job.get("prepared"):
+        return jsonify({"error": "Trabajo no encontrado o expirado."}), 404
+    if "music" not in request.files:
+        return jsonify({"error": "No se recibio ningun archivo de musica."}), 400
+    try:
+        prepared = job["prepared"]
+        file = request.files["music"]
+        ext = Path(secure_filename(file.filename or "musica.mp3")).suffix.lower() or ".mp3"
+        if ext not in (".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"):
+            return jsonify({"error": "Formato no valido. Usa MP3, WAV, M4A, AAC, OGG o FLAC."}), 400
+        dest = prepared.job_dir / f"musica{ext}"
+        file.save(str(dest))
+        prepared.music_path = dest
+        return jsonify({"ok": True, "music_file": dest.name})
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"error": str(exc)}), 400
+
+
+# --------------------------------------------------------------------------
+#  Quitar la musica de fondo
+# --------------------------------------------------------------------------
+@app.route("/api/remove_music", methods=["POST"])
+def api_remove_music():
+    data = request.get_json(force=True) or {}
+    job = JOBS.get(data.get("job_id"))
+    if not job or not job.get("prepared"):
+        return jsonify({"error": "Trabajo no encontrado o expirado."}), 404
+    job["prepared"].music_path = None
+    return jsonify({"ok": True})
 
 
 # --------------------------------------------------------------------------
@@ -264,6 +455,13 @@ def api_assemble():
     if not job or not job.get("prepared"):
         return jsonify({"error": "Trabajo no encontrado o expirado."}), 404
 
+    # Volumen de musica (si el usuario lo ajusto en la pantalla de revision)
+    if data.get("music_volume") is not None:
+        try:
+            job["options"]["music_volume"] = float(data.get("music_volume"))
+        except (TypeError, ValueError):
+            pass
+
     job["phase"] = "assembling"
     job["status"] = "running"
     job["percent"] = 0
@@ -286,6 +484,7 @@ def _run_assemble(job_id: str) -> None:
             subtitle_color=options["subtitle_color"],
             subtitle_position=options["subtitle_position"],
             use_avatar=options["use_avatar"],
+            music_volume=float(options.get("music_volume", 0.15)),
             progress=progress,
         )
         job["status"] = "done"
@@ -321,6 +520,7 @@ def api_status(job_id: str):
         "message": job["message"],
         "percent": job["percent"],
         "error": job["error"],
+        "draft": job.get("draft"),
         "review": job["review"],
         "result": job["result"],
     })
@@ -364,7 +564,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 11 (4 fuentes de fotos: Pexels/Unsplash/Pixabay/Openverse)")
+    print("  VERSION DEL CODIGO: 12 (Modo Historia + Musica de fondo opcional)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)
