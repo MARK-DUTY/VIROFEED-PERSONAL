@@ -76,6 +76,7 @@ class ImageResult:
     path: Path
     source: str       # "ai" | "pexels" | "pixabay"
     query: str        # con que descripcion/keyword se obtuvo
+    url: str = ""     # URL original de la foto (para no repetirla al pulsar "Otra foto")
 
 
 def _download(url: str, dest: Path, timeout: int = 60) -> bool:
@@ -241,7 +242,7 @@ def _search_pexels(query: str, want: int = 1) -> list[str]:
     if not settings.pexels_api_key or settings.pexels_api_key.startswith("PEGA_AQUI"):
         return []
     headers = {"Authorization": settings.pexels_api_key}
-    params = {"query": query, "per_page": max(1, want * 3), "orientation": "portrait"}
+    params = {"query": query, "per_page": min(80, max(15, want * 2)), "orientation": "portrait"}
     try:
         resp = requests.get(PEXELS_SEARCH, headers=headers, params=params, timeout=25)
         if resp.status_code != 200:
@@ -266,7 +267,7 @@ def _search_pixabay(query: str, want: int = 1) -> list[str]:
         "q": query,
         "image_type": "photo",
         "orientation": "vertical",
-        "per_page": max(3, want * 3),
+        "per_page": min(200, max(15, want * 2)),
         "safesearch": "true",
     }
     try:
@@ -285,7 +286,7 @@ def _search_unsplash(query: str, want: int = 1) -> list[str]:
     if not key or key.startswith("PEGA_AQUI"):
         return []
     headers = {"Authorization": f"Client-ID {key}", **_HEADERS}
-    params = {"query": query, "per_page": max(1, want * 3), "orientation": "portrait"}
+    params = {"query": query, "per_page": min(30, max(15, want * 2)), "orientation": "portrait"}
     try:
         resp = requests.get(UNSPLASH_SEARCH, headers=headers, params=params, timeout=25)
         if resp.status_code != 200:
@@ -308,7 +309,7 @@ def _search_openverse(query: str, want: int = 1) -> list[str]:
         "q": query,
         "license_type": "commercial",   # solo imagenes de uso comercial
         "aspect_ratio": "tall",         # verticales, para formato 9:16
-        "page_size": max(3, want * 3),
+        "page_size": min(20, max(15, want * 2)),
     }
     try:
         resp = requests.get(OPENVERSE_SEARCH, headers=_HEADERS, params=params, timeout=25)
@@ -320,21 +321,24 @@ def _search_openverse(query: str, want: int = 1) -> list[str]:
         return []
 
 
-def _download_stock(query: str, dest: Path, used_urls: set[str]) -> str | None:
-    """Intenta descargar una foto de stock para la query. Devuelve la fuente o None."""
+def _download_stock(query: str, dest: Path, used_urls: set[str], want: int = 12) -> tuple[str, str] | None:
+    """
+    Intenta descargar una foto de stock para la query, SALTANDO las que ya se
+    mostraron antes (las que estan en used_urls). Devuelve (fuente, url) o None.
+    """
     # Mezclamos varias fuentes (mejores primero) para mas variedad y concordancia.
     candidates = (
-        [(u, "pexels") for u in _search_pexels(query)]
-        + [(u, "unsplash") for u in _search_unsplash(query)]
-        + [(u, "pixabay") for u in _search_pixabay(query)]
-        + [(u, "openverse") for u in _search_openverse(query)]
+        [(u, "pexels") for u in _search_pexels(query, want)]
+        + [(u, "unsplash") for u in _search_unsplash(query, want)]
+        + [(u, "pixabay") for u in _search_pixabay(query, want)]
+        + [(u, "openverse") for u in _search_openverse(query, want)]
     )
     for url, source in candidates:
         if not url or url in used_urls:
             continue
         if _download(url, dest):
             used_urls.add(url)
-            return source
+            return source, url
     return None
 
 
@@ -344,6 +348,7 @@ def fetch_single_image(
     dest: Path,
     mode: str = "hybrid",
     seed: int | None = None,
+    used_urls: set[str] | None = None,
 ) -> ImageResult | None:
     """
     Consigue UNA sola imagen para una escena (se usa al REGENERAR una imagen
@@ -351,10 +356,12 @@ def fetch_single_image(
 
     mode: "together" | "gemini" | "ai" | "stock" | "hybrid"
     seed: cambia la semilla para que la IA genere una imagen DISTINTA cada vez.
+    used_urls: conjunto de URLs ya mostradas (para no repetir foto al pulsar
+               "Otra foto"). Si es None, se usa uno nuevo (sin memoria).
     """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    used: set[str] = set()
+    used: set[str] = used_urls if used_urls is not None else set()
     return _make_one(image_prompt, keyword, dest, mode, used, seed)
 
 
@@ -387,11 +394,12 @@ def _make_one(
             return ImageResult(path=dest, source="ai", query=image_prompt)
 
     # 2) Respaldo a foto de stock (sirve para todos los modos)
-    src = _download_stock(keyword, dest, used_urls)
-    if src is None and image_prompt:
-        src = _download_stock(image_prompt.split(",")[0], dest, used_urls)
-    if src:
-        return ImageResult(path=dest, source=src, query=keyword)
+    got = _download_stock(keyword, dest, used_urls)
+    if got is None and image_prompt:
+        got = _download_stock(image_prompt.split(",")[0], dest, used_urls)
+    if got:
+        source, url = got
+        return ImageResult(path=dest, source=source, query=keyword, url=url)
 
     return None
 

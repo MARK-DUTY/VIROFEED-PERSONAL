@@ -148,6 +148,9 @@ class PreparedJob:
     synth_narration: str = ""           # narracion con la que se genero el audio actual
     # Musica de fondo opcional (la sube el usuario). None = sin musica.
     music_path: Path | None = None
+    # Memoria de fotos de stock ya mostradas, por escena (para que "Otra foto"
+    # entregue una DISTINTA en cada clic y no repita la misma).
+    used_image_urls: dict[int, set] = field(default_factory=dict)
 
     def current_narration(self) -> str:
         """La narracion actual = union de los textos de las escenas (tras editar)."""
@@ -476,14 +479,33 @@ def regenerate_scene_image(
     ts = datetime.now().strftime("%H%M%S")
     dest = images_dir / f"img_{index:02d}_{ts}_{attempt}.jpg"
 
+    # Memoria de fotos ya mostradas en esta escena, para NO repetir al pulsar
+    # "Otra foto". Incluimos tambien la foto actual para que el primer clic ya
+    # entregue una distinta.
+    used = prepared.used_image_urls.setdefault(index, set())
+    current = prepared.images[index] if index < len(prepared.images) else None
+    if current is not None and getattr(current, "url", ""):
+        used.add(current.url)
+
     seed = 1000 + index * 100 + attempt + 1
-    result = fetch_single_image(scene.image_prompt, scene.keyword, dest, mode=mode, seed=seed)
+    result = fetch_single_image(
+        scene.image_prompt, scene.keyword, dest, mode=mode, seed=seed, used_urls=used
+    )
+    if result is None:
+        # Quiza se agotaron las fotos nuevas para esta escena: reiniciamos la
+        # memoria y reintentamos (asi vuelve a haber opciones en vez de fallar).
+        used.clear()
+        result = fetch_single_image(
+            scene.image_prompt, scene.keyword, dest, mode=mode, seed=seed, used_urls=used
+        )
     if result is None:
         raise ValueError(
             "No pude generar/encontrar una nueva imagen. "
             "Prueba con otra descripcion, o cambia a 'foto real'."
         )
 
+    if getattr(result, "url", ""):
+        used.add(result.url)
     prepared.images[index] = result
     return result
 

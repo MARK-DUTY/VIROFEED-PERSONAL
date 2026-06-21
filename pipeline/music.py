@@ -103,10 +103,12 @@ def _filter_chords(chords: list[list[float]], chord_len: float) -> tuple[str, fl
             parts.append(
                 f"sine=frequency={freq:.2f}:sample_rate=44100:duration={chord_len:.2f}[{src}]"
             )
-            # Bajamos el volumen de CADA nota (evita saturacion al sumarlas),
-            # la colocamos en su lugar y le ponemos fundido de entrada/salida.
+            # Subimos el volumen de CADA nota a un nivel alto (la pista queda
+            # cerca de escala completa). El volumen final de fondo se controla
+            # despues, al mezclar con la voz. Antes estaba en 0.16 y, al
+            # multiplicarlo otra vez en la mezcla, la musica quedaba casi muda.
             parts.append(
-                f"[{src}]volume=0.16,adelay={start_ms}:all=1,"
+                f"[{src}]volume=0.30,adelay={start_ms}:all=1,"
                 f"afade=t=in:st={start_s:.2f}:d=0.40,"
                 f"afade=t=out:st={start_s + chord_len - 0.50:.2f}:d=0.50[{out}]"
             )
@@ -131,7 +133,7 @@ def _filter_simple(freqs: list[float], total: float) -> tuple[str, float]:
         parts.append(
             f"sine=frequency={freq:.2f}:sample_rate=44100:duration={total:.2f}[s{i}]"
         )
-        parts.append(f"[s{i}]volume=0.18[v{i}]")
+        parts.append(f"[s{i}]volume=0.30[v{i}]")
         labels.append(f"[v{i}]")
     parts.append(
         "".join(labels)
@@ -146,7 +148,7 @@ def _filter_minimal(freq: float, total: float) -> tuple[str, float]:
     """Nivel 3 (minimo, casi infalible): una sola nota suave con fundidos."""
     filt = (
         f"sine=frequency={freq:.2f}:sample_rate=44100:duration={total:.2f},"
-        f"volume=0.22,afade=t=in:st=0:d=1.0,afade=t=out:st={total - 1.5:.2f}:d=1.5,"
+        f"volume=0.85,afade=t=in:st=0:d=1.0,afade=t=out:st={total - 1.5:.2f}:d=1.5,"
         f"lowpass=f=2800[out]"
     )
     return filt, total
@@ -222,16 +224,18 @@ def ensure_default_music() -> list[Path]:
     MUSIC_DIR.mkdir(parents=True, exist_ok=True)
     valid: list[Path] = []
 
-    # Limpieza unica: las pistas viejas (formato 'auto_*.mp3') pudieron quedar
-    # mudas/danadas con la version anterior. Las borramos para regenerar bien.
-    for old in MUSIC_DIR.glob("auto_*.mp3"):
-        try:
-            old.unlink()
-        except OSError:
-            pass
+    # Limpieza: las pistas viejas pudieron quedar mudas/muy bajitas con versiones
+    # anteriores. Borramos los formatos antiguos ('auto_*.mp3' y 'bgm_*.mp3') para
+    # regenerarlas con el volumen nuevo (audible). Las nuevas usan 'bgm2_*.mp3'.
+    for pattern in ("auto_*.mp3", "bgm_*.mp3"):
+        for old in MUSIC_DIR.glob(pattern):
+            try:
+                old.unlink()
+            except OSError:
+                pass
 
     for name, chords in _MOODS.items():
-        dest = MUSIC_DIR / f"bgm_{name}.mp3"
+        dest = MUSIC_DIR / f"bgm2_{name}.mp3"
 
         if _is_valid_track(dest):
             valid.append(dest)

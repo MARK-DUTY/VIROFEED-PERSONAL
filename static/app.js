@@ -392,7 +392,10 @@ async function deleteScene(i) {
 }
 
 function setSceneLoading(i, on) {
-  $(`loading-${i}`).classList.toggle("hidden", !on);
+  const loading = $(`loading-${i}`);
+  if (loading) loading.classList.toggle("hidden", !on);
+  const img = $(`img-${i}`);
+  if (img) img.classList.toggle("is-loading", on);
   document.querySelectorAll(`#scene-${i} .btn-mini`).forEach((b) => (b.disabled = on));
 }
 
@@ -407,12 +410,15 @@ async function regenerate(i, mode) {
       body: JSON.stringify({ job_id: currentJob, index: i, mode, prompt, attempt: attempts[i] }),
     });
     const data = await resp.json();
-    if (!resp.ok) { alert(data.error || "No se pudo regenerar la imagen"); return; }
-    $(`img-${i}`).src = imgUrl(data.image_file);
+    if (!resp.ok) { alert(data.error || "No se pudo regenerar la imagen"); setSceneLoading(i, false); return; }
+    // Dejamos el girito hasta que la NUEVA foto se vea (asi notas el cambio).
+    const img = $(`img-${i}`);
+    img.onload = () => setSceneLoading(i, false);
+    img.onerror = () => setSceneLoading(i, false);
+    img.src = imgUrl(data.image_file);
     $(`badge-${i}`).textContent = data.source;
   } catch (e) {
     alert("Error al regenerar: " + e);
-  } finally {
     setSceneLoading(i, false);
   }
 }
@@ -427,12 +433,14 @@ async function uploadImage(i, file) {
     fd.append("image", file);
     const resp = await fetch("/api/upload_image", { method: "POST", body: fd });
     const data = await resp.json();
-    if (!resp.ok) { alert(data.error || "No se pudo subir la imagen"); return; }
-    $(`img-${i}`).src = imgUrl(data.image_file);
+    if (!resp.ok) { alert(data.error || "No se pudo subir la imagen"); setSceneLoading(i, false); return; }
+    const img = $(`img-${i}`);
+    img.onload = () => setSceneLoading(i, false);
+    img.onerror = () => setSceneLoading(i, false);
+    img.src = imgUrl(data.image_file);
     $(`badge-${i}`).textContent = data.source;
   } catch (e) {
     alert("Error al subir: " + e);
-  } finally {
     setSceneLoading(i, false);
   }
 }
