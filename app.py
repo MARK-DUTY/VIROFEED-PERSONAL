@@ -676,7 +676,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 15 (musica confiable + voz/avatar en revision)")
+    print("  VERSION DEL CODIGO: 16 (Otra foto cambia de verdad + musica audible)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)

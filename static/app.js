@@ -403,12 +403,17 @@ async function regenerate(i, mode) {
   attempts[i] = (attempts[i] || 0) + 1;
   const prompt = $(`prompt-${i}`).value.trim();
   setSceneLoading(i, true);
+  // Proteccion anti-cuelgue: si tarda demasiado, cancelamos y avisamos.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 100000);
   try {
     const resp = await fetch("/api/regenerate_image", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ job_id: currentJob, index: i, mode, prompt, attempt: attempts[i] }),
+      signal: ctrl.signal,
     });
+    clearTimeout(timer);
     const data = await resp.json();
     if (!resp.ok) { alert(data.error || "No se pudo regenerar la imagen"); setSceneLoading(i, false); return; }
     // Dejamos el girito hasta que la NUEVA foto se vea (asi notas el cambio).
@@ -418,7 +423,12 @@ async function regenerate(i, mode) {
     img.src = imgUrl(data.image_file);
     $(`badge-${i}`).textContent = data.source;
   } catch (e) {
-    alert("Error al regenerar: " + e);
+    clearTimeout(timer);
+    if (e.name === "AbortError") {
+      alert("La busqueda de otra foto tardo demasiado. Revisa tu internet e intentalo otra vez.");
+    } else {
+      alert("Error al regenerar: " + e);
+    }
     setSceneLoading(i, false);
   }
 }
