@@ -129,6 +129,8 @@
           <span>Fuente de imagenes</span>
           <select id="image_source">
             <option value="stock" selected>Fotos reales (Pexels / Pixabay)</option>
+            <option value="ai">🎨 Imagenes con IA (crea lo que describes)</option>
+            <option value="hybrid">Mixto (IA y, si falla, foto real)</option>
           </select>
         </label>
       </div>
@@ -169,7 +171,8 @@
 
     <section class="card hidden" id="review-card">
       <h2>🖼️ Revisa y aprueba antes de armar el video</h2>
-      <p class="hint">Para cada escena puedes: ✏️ editar el <strong>diálogo</strong>, 🎨 regenerar la imagen, ⬆️ subir una imagen desde tu PC, o 🗑️ eliminar la escena. Cuando todo te guste, genera el video.</p>
+      <p class="hint">Para cada escena puedes: ✏️ editar el <strong>diálogo</strong>, 🎨 <strong>crear la imagen con IA usando tu texto</strong> (lo que escribas en "Descripción de la imagen"), 🔁 buscar otra <strong>foto real</strong>, ⬆️ subir una imagen desde tu PC, o 🗑️ eliminar la escena. Cuando todo te guste, genera el video.</p>
+      <p class="hint">💡 <strong>¿Quieres una imagen exacta de lo que pides?</strong> Escribe tu descripción en inglés y pulsa <strong>"🎨 Crear con mi texto (IA)"</strong>. La IA la inventa desde cero (gratis). El botón "🔁 Otra foto real" busca fotos ya existentes, que no siempre coinciden con todo.</p>
       <p class="hint" id="dialogue-note">💡 Si editas algún diálogo o eliminas escenas, la voz y los subtítulos se regeneran solos al generar el video.</p>
       <div id="scenes-grid" class="scenes-grid"></div>
 

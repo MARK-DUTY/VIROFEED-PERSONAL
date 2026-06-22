@@ -59,6 +59,34 @@ _REALISM_SUFFIX = (
 )
 
 
+# Palabras de relleno en ingles que NO ayudan a buscar fotos de stock.
+# Las quitamos para que la busqueda en Pexels/Pixabay sea con las palabras
+# importantes que escribio el usuario (ej. "coffee pot honey").
+_STOPWORDS = {
+    "a", "an", "the", "of", "with", "and", "or", "in", "on", "at", "to", "for",
+    "image", "images", "photo", "photos", "picture", "pictures", "photograph",
+    "shot", "view", "scene", "this", "that", "these", "those", "is", "are",
+    "showing", "show", "shows", "featuring", "close", "up", "closeup",
+    "background", "foreground", "very", "really", "some", "its", "it",
+}
+
+
+def _prompt_to_query(prompt: str) -> str:
+    """
+    Convierte una descripcion larga en ingles en una consulta CORTA para buscar
+    fotos de stock (Pexels/Pixabay funcionan mejor con 2-5 palabras clave).
+
+    Quita relleno como "an image of", "a photo of", articulos, etc., para que
+    la busqueda use lo que de verdad importa del prompt del usuario.
+    Ej: "an image of a coffee pot and a small bottle of honey" -> "coffee pot bottle honey"
+    """
+    text = (prompt or "").lower()
+    for ch in ",.;:!?\"'()[]{}/-":
+        text = text.replace(ch, " ")
+    words = [w for w in text.split() if w and w not in _STOPWORDS]
+    return " ".join(words[:5]).strip()
+
+
 def _enhance_for_realism(prompt: str) -> str:
     """
     Envuelve la descripcion de la escena con instrucciones que mejoran el
@@ -393,13 +421,22 @@ def _make_one(
         if generate_ai_image(image_prompt, dest, seed=seed):
             return ImageResult(path=dest, source="ai", query=image_prompt)
 
-    # 2) Respaldo a foto de stock (sirve para todos los modos)
-    got = _download_stock(keyword, dest, used_urls)
-    if got is None and image_prompt:
-        got = _download_stock(image_prompt.split(",")[0], dest, used_urls)
-    if got:
-        source, url = got
-        return ImageResult(path=dest, source=source, query=keyword, url=url)
+    # 2) Respaldo a foto de stock (sirve para todos los modos).
+    #    IMPORTANTE: buscamos PRIMERO con la descripcion que escribio el usuario
+    #    (su prompt), para que "Otra foto" respete lo que pidio. Si esa busqueda
+    #    no da resultados, probamos con la palabra clave original de la escena.
+    queries: list[str] = []
+    prompt_query = _prompt_to_query(image_prompt)
+    if prompt_query:
+        queries.append(prompt_query)
+    if keyword and keyword.lower() not in [q.lower() for q in queries]:
+        queries.append(keyword)
+
+    for q in queries:
+        got = _download_stock(q, dest, used_urls)
+        if got:
+            source, url = got
+            return ImageResult(path=dest, source=source, query=q, url=url)
 
     return None
 

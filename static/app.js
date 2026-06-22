@@ -227,7 +227,7 @@ function renderDraft(draft) {
       <label class="scene-label">🎬 Diálogo (lo que se narra)</label>
       <textarea class="scene-dialogue" id="dtext-${scene.index}" rows="2">${escapeHtml(scene.text)}</textarea>
       <label class="scene-label">🖼️ Prompt de la imagen (en inglés)</label>
-      <textarea class="scene-prompt" id="dprompt-${scene.index}" rows="3">${escapeHtml(scene.image_prompt)}</textarea>
+      <textarea class="scene-prompt" id="dprompt-${scene.index}" rows="3" spellcheck="false">${escapeHtml(scene.image_prompt)}</textarea>
     `;
     grid.appendChild(card);
   });
@@ -314,10 +314,11 @@ function renderReview(review) {
         title="Edita lo que se dice en esta escena">${escapeHtml(scene.text)}</textarea>
       <span class="scene-saved hidden" id="saved-${scene.index}">✔ Guardado</span>
       <label class="scene-label">🖼️ Descripción de la imagen (en inglés)</label>
-      <textarea class="scene-prompt" id="prompt-${scene.index}" rows="2"
-        title="Descripcion de la imagen (puedes editarla)">${escapeHtml(scene.image_prompt)}</textarea>
+      <textarea class="scene-prompt" id="prompt-${scene.index}" rows="2" spellcheck="false"
+        title="Describe la imagen que quieres (en inglés). Luego pulsa 'Crear con mi texto (IA)'.">${escapeHtml(scene.image_prompt)}</textarea>
       <div class="scene-actions">
-        <button class="btn-mini" data-act="stock" data-i="${scene.index}">🔁 Otra foto</button>
+        <button class="btn-mini btn-ai" data-act="ai" data-i="${scene.index}">🎨 Crear con mi texto (IA)</button>
+        <button class="btn-mini" data-act="stock" data-i="${scene.index}">🔁 Otra foto real</button>
         <button class="btn-mini" data-act="upload" data-i="${scene.index}">⬆️ Subir</button>
         <button class="btn-mini btn-danger" data-act="delete" data-i="${scene.index}">🗑️ Eliminar</button>
       </div>
@@ -330,7 +331,9 @@ function renderReview(review) {
   grid.querySelectorAll(".btn-mini").forEach((btn) => {
     const i = parseInt(btn.dataset.i, 10);
     const act = btn.dataset.act;
-    if (act === "stock") {
+    if (act === "ai") {
+      btn.addEventListener("click", () => regenerate(i, "ai"));
+    } else if (act === "stock") {
       btn.addEventListener("click", () => regenerate(i, "stock"));
     } else if (act === "upload") {
       btn.addEventListener("click", () => $(`file-${i}`).click());
