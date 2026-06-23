@@ -101,6 +101,48 @@ def extract_article(url: str, timeout: int = 25) -> Article:
     return article
 
 
+def extract_articles(urls: list[str], timeout: int = 25) -> Article:
+    """
+    Lee VARIAS noticias (varias URLs del mismo tema) y las combina en un solo
+    Article con todo el texto junto. Asi hay material de sobra para videos largos.
+
+    - Lee cada URL; si alguna falla, la salta (no rompe todo el proceso).
+    - El titulo es el de la primera noticia que se pudo leer.
+    - El texto es la union de todas, separadas por una linea en blanco.
+
+    Lanza ValueError solo si NINGUNA de las URLs se pudo leer.
+    """
+    urls = [u.strip() for u in (urls or []) if u and u.strip()]
+    if not urls:
+        raise ValueError("No diste ninguna URL de noticia.")
+    # Si es una sola, usamos el lector normal de siempre.
+    if len(urls) == 1:
+        return extract_article(urls[0], timeout=timeout)
+
+    title = ""
+    parts: list[str] = []
+    errors: list[str] = []
+    for u in urls:
+        try:
+            art = extract_article(u, timeout=timeout)
+            if not title:
+                title = art.title
+            parts.append(art.text)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"- {u}: {exc}")
+
+    if not parts:
+        raise ValueError(
+            "No pude leer NINGUNA de las paginas que pegaste. Revisa que sean "
+            "enlaces directos a articulos. Detalle:\n" + "\n".join(errors)
+        )
+
+    combined = "\n\n".join(parts)
+    article = Article(url=urls[0], title=title or "Noticia", text=_clean(combined))
+    print(f"[articulo] {len(parts)} de {len(urls)} fuentes combinadas")
+    return article
+
+
 def _fallback_title(html: str) -> str:
     m = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
     if m:

@@ -35,9 +35,10 @@
       <!-- Panel: URL -->
       <div class="tab-panel" id="tab-url">
         <label class="field">
-          <span>URL de la noticia</span>
-          <input type="url" id="url" placeholder="https://www.ejemplo.com/noticia..." autofocus>
+          <span>URL de la noticia (puedes pegar varias, una por renglón)</span>
+          <textarea id="url" rows="3" placeholder="https://www.ejemplo.com/noticia-1&#10;https://www.otrositio.com/noticia-2&#10;https://www.tercersitio.com/noticia-3" autofocus></textarea>
         </label>
+        <p class="hint">💡 Para videos largos (4-5 min), pega <strong>2 o 3 noticias del mismo tema</strong> (una por renglón). El programa juntará todo el contenido para que el video tenga suficiente material. Para videos cortos, con un solo link basta.</p>
       </div>
 
       <!-- Panel: Historia -->
@@ -59,10 +60,11 @@
       <!-- Panel: Video de YouTube -->
       <div class="tab-panel hidden" id="tab-youtube">
         <label class="field">
-          <span>Enlace del video de YouTube</span>
-          <input type="url" id="youtube_url" placeholder="https://www.youtube.com/watch?v=...">
+          <span>Enlace(s) de YouTube (puedes pegar varios, uno por renglón)</span>
+          <textarea id="youtube_url" rows="3" placeholder="https://www.youtube.com/watch?v=VIDEO1&#10;https://www.youtube.com/watch?v=VIDEO2"></textarea>
         </label>
-        <p class="hint">El programa leerá los <strong>subtítulos</strong> del video para crear el guion (la mayoría de los videos tienen subtítulos). Si el video no tiene, usará su descripción.</p>
+        <p class="hint">El programa leerá los <strong>subtítulos</strong> de cada video para crear el guion (la mayoría de los videos tienen subtítulos). Si el video no tiene, usará su descripción.</p>
+        <p class="hint">💡 Para videos largos (4-5 min), pega <strong>2 o 3 videos del mismo tema</strong> (uno por renglón) para tener suficiente material.</p>
       </div>
 
       <div class="row">

@@ -24,7 +24,7 @@ try:
     from . import music as music_mod
 except Exception:  # si falta music.py, el programa sigue funcionando (sin musica automatica)
     music_mod = None
-from .article import extract_article
+from .article import extract_article, extract_articles
 from .assemble import build_video, probe_duration, resolution_for
 from .config import settings
 from .images import ImageResult, fetch_scene_images, fetch_single_image
@@ -180,7 +180,7 @@ def _scene_durations(scenes: list[Scene], total_duration: float) -> list[float]:
 #  PASO 1: preparar (guion + voz + imagenes) para revisar
 # ==========================================================================
 def prepare_video(
-    url: str,
+    url,
     *,
     duration: int | None = None,
     style: str | None = None,
@@ -191,6 +191,8 @@ def prepare_video(
     progress: ProgressFn = _noop,
 ) -> PreparedJob:
     cfg = settings
+    # `url` puede ser un solo enlace (texto) o varios (lista). Normalizamos.
+    urls = url if isinstance(url, list) else [url]
     duration = duration or cfg.video_duration
     voice = voice or cfg.tts_voice
     voice = _resolve_voice(voice)   # si es "automatica", elige una del grupo (rotando)
@@ -204,9 +206,10 @@ def prepare_video(
     job_dir.mkdir(parents=True, exist_ok=True)
     images_dir = job_dir / "images"
 
-    # 1) Leer la noticia
-    progress("Leyendo la noticia...", 8)
-    article = extract_article(url)
+    # 1) Leer la(s) noticia(s) y combinarlas
+    n = len([u for u in urls if str(u).strip()])
+    progress("Leyendo la noticia..." if n <= 1 else f"Leyendo {n} noticias...", 8)
+    article = extract_articles(urls)
 
     # 2) Guion en escenas
     progress("Escribiendo el guion viral con IA...", 25)
@@ -253,7 +256,7 @@ def prepare_video(
 #  PASO 1 (YOUTUBE): preparar (subtitulos -> guion + voz + imagenes) a revisar
 # ==========================================================================
 def prepare_youtube(
-    url: str,
+    url,
     *,
     duration: int | None = None,
     style: str | None = None,
@@ -264,14 +267,16 @@ def prepare_youtube(
     progress: ProgressFn = _noop,
 ) -> PreparedJob:
     """
-    Igual que prepare_video, pero el texto sale de un VIDEO DE YOUTUBE (sus
-    subtitulos) en vez de una noticia. El resto del flujo es identico.
+    Igual que prepare_video, pero el texto sale de uno o VARIOS VIDEOS DE YOUTUBE
+    (sus subtitulos) en vez de una noticia. El resto del flujo es identico.
     """
     # Import "perezoso": asi runner.py se importa bien aunque youtube.py todavia
     # no se haya descargado (la auto-reparacion de app.py lo trae al arrancar).
-    from .youtube import extract_youtube
+    from .youtube import extract_youtubes
 
     cfg = settings
+    # `url` puede ser un solo enlace (texto) o varios (lista). Normalizamos.
+    urls = url if isinstance(url, list) else [url]
     duration = duration or cfg.video_duration
     voice = voice or cfg.tts_voice
     voice = _resolve_voice(voice)   # si es "automatica", elige una del grupo (rotando)
@@ -285,9 +290,14 @@ def prepare_youtube(
     job_dir.mkdir(parents=True, exist_ok=True)
     images_dir = job_dir / "images"
 
-    # 1) Leer los subtitulos del video de YouTube
-    progress("Leyendo los subtitulos del video de YouTube...", 8)
-    article = extract_youtube(url)
+    # 1) Leer los subtitulos del/los video(s) de YouTube y combinarlos
+    n = len([u for u in urls if str(u).strip()])
+    progress(
+        "Leyendo los subtitulos del video de YouTube..." if n <= 1
+        else f"Leyendo los subtitulos de {n} videos de YouTube...",
+        8,
+    )
+    article = extract_youtubes(urls)
 
     # 2) Guion en escenas (mismo motor que el modo noticia)
     progress("Escribiendo el guion viral con IA...", 25)

@@ -11,6 +11,7 @@ Luego abre:      http://localhost:5000
 """
 from __future__ import annotations
 
+import re
 import threading
 import traceback
 import uuid
@@ -64,6 +65,21 @@ from pipeline.runner import (
 from pipeline.voice import list_spanish_voices
 
 app = Flask(__name__)
+
+
+def _parse_urls(data: dict) -> list[str]:
+    """
+    Saca la lista de URLs del cuerpo de la peticion. Acepta:
+      - "urls": ["...", "..."]  (lista)
+      - "url" : "uno\\notro"     (texto con un enlace por renglon)
+    Devuelve la lista limpia (sin renglones vacios).
+    """
+    raw = data.get("urls")
+    if isinstance(raw, list):
+        items = raw
+    else:
+        items = re.split(r"[\r\n]+", str(data.get("url") or ""))
+    return [u.strip() for u in items if u and u.strip()]
 
 # Estado de los trabajos (en memoria). clave = job_id
 #   cada job: {status, phase, message, percent, error, prepared, options, review, result}
@@ -149,8 +165,8 @@ def _draft_payload(job_id: str) -> dict:
 @app.route("/api/prepare", methods=["POST"])
 def api_prepare():
     data = request.get_json(force=True) or {}
-    url = (data.get("url") or "").strip()
-    if not url:
+    urls = _parse_urls(data)
+    if not urls:
         return jsonify({"error": "Pega la URL de una noticia primero."}), 400
 
     fresh = settings.reload()
@@ -179,11 +195,11 @@ def api_prepare():
         "review": None, "result": None,
     }
 
-    threading.Thread(target=_run_prepare, args=(job_id, url, options), daemon=True).start()
+    threading.Thread(target=_run_prepare, args=(job_id, urls, options), daemon=True).start()
     return jsonify({"job_id": job_id})
 
 
-def _run_prepare(job_id: str, url: str, options: dict) -> None:
+def _run_prepare(job_id: str, url, options: dict) -> None:
     def progress(msg: str, pct: int) -> None:
         JOBS[job_id]["message"] = msg
         JOBS[job_id]["percent"] = pct
@@ -217,8 +233,8 @@ def _run_prepare(job_id: str, url: str, options: dict) -> None:
 @app.route("/api/prepare_youtube", methods=["POST"])
 def api_prepare_youtube():
     data = request.get_json(force=True) or {}
-    url = (data.get("url") or "").strip()
-    if not url:
+    urls = _parse_urls(data)
+    if not urls:
         return jsonify({"error": "Pega el enlace de un video de YouTube primero."}), 400
 
     fresh = settings.reload()
@@ -247,11 +263,11 @@ def api_prepare_youtube():
         "review": None, "result": None,
     }
 
-    threading.Thread(target=_run_prepare_youtube, args=(job_id, url, options), daemon=True).start()
+    threading.Thread(target=_run_prepare_youtube, args=(job_id, urls, options), daemon=True).start()
     return jsonify({"job_id": job_id})
 
 
-def _run_prepare_youtube(job_id: str, url: str, options: dict) -> None:
+def _run_prepare_youtube(job_id: str, url, options: dict) -> None:
     def progress(msg: str, pct: int) -> None:
         JOBS[job_id]["message"] = msg
         JOBS[job_id]["percent"] = pct
@@ -680,7 +696,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 16 (formatos 9:16/16:9/1:1 + videos hasta 5 min)")
+    print("  VERSION DEL CODIGO: 17 (varias URLs/videos por tema para 5 min)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)

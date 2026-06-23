@@ -209,3 +209,44 @@ def extract_youtube(url: str, timeout: int = 25) -> Article:
             "mayoria los tienen) o cuya descripcion sea mas larga."
         )
     return article
+
+
+def extract_youtubes(urls: list[str], timeout: int = 25) -> Article:
+    """
+    Lee VARIOS videos de YouTube (del mismo tema) y combina sus subtitulos en un
+    solo Article. Asi hay material de sobra para videos largos.
+
+    - Lee cada video; si alguno falla, lo salta (no rompe todo el proceso).
+    - El titulo es el del primer video que se pudo leer.
+    - El texto es la union de todos.
+
+    Lanza ValueError solo si NINGUNO de los videos se pudo leer.
+    """
+    urls = [u.strip() for u in (urls or []) if u and u.strip()]
+    if not urls:
+        raise ValueError("No diste ningun enlace de YouTube.")
+    if len(urls) == 1:
+        return extract_youtube(urls[0], timeout=timeout)
+
+    title = ""
+    parts: list[str] = []
+    errors: list[str] = []
+    for u in urls:
+        try:
+            art = extract_youtube(u, timeout=timeout)
+            if not title:
+                title = art.title
+            parts.append(art.text)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"- {u}: {exc}")
+
+    if not parts:
+        raise ValueError(
+            "No pude leer NINGUNO de los videos que pegaste. Revisa que tengan "
+            "subtitulos. Detalle:\n" + "\n".join(errors)
+        )
+
+    combined = "\n\n".join(parts)
+    article = Article(url=urls[0], title=title or "Video de YouTube", text=_clean(combined))
+    print(f"[youtube] {len(parts)} de {len(urls)} videos combinados")
+    return article

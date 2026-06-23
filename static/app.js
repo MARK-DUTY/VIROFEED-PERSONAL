@@ -84,20 +84,28 @@ function onGenerate() {
   }
 }
 
+// Convierte el texto de un campo (con un enlace por renglon) en una lista limpia
+function parseLinks(value) {
+  return (value || "")
+    .split(/[\r\n]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 // ----------------------------------------------------------------------
 //  PASO 1 (URL): preparar
 // ----------------------------------------------------------------------
 async function startPrepare() {
-  const url = $("url").value.trim();
-  if (!url) {
+  const urls = parseLinks($("url").value);
+  if (urls.length === 0) {
     alert("Pega la URL de una noticia primero.");
     return;
   }
 
-  const payload = { url, ...sharedOptions() };
+  const payload = { urls, url: urls.join("\n"), ...sharedOptions() };
 
   generateBtn.disabled = true;
-  progressTitle.textContent = "Preparando tu video...";
+  progressTitle.textContent = urls.length > 1 ? "Leyendo las noticias..." : "Preparando tu video...";
   show(progressCard);
   setProgress(3, "Iniciando...");
 
@@ -120,16 +128,16 @@ async function startPrepare() {
 //  PASO 1 (YOUTUBE): preparar desde un link de video de YouTube
 // ----------------------------------------------------------------------
 async function startYoutube() {
-  const url = $("youtube_url").value.trim();
-  if (!url) {
+  const urls = parseLinks($("youtube_url").value);
+  if (urls.length === 0) {
     alert("Pega el enlace de un video de YouTube primero.");
     return;
   }
 
-  const payload = { url, ...sharedOptions() };
+  const payload = { urls, url: urls.join("\n"), ...sharedOptions() };
 
   generateBtn.disabled = true;
-  progressTitle.textContent = "Leyendo el video de YouTube...";
+  progressTitle.textContent = urls.length > 1 ? "Leyendo los videos de YouTube..." : "Leyendo el video de YouTube...";
   show(progressCard);
   setProgress(3, "Iniciando...");
 
