@@ -24,6 +24,21 @@ VIDEO_W = 1080
 VIDEO_H = 1920
 FPS = 30
 
+# Formatos disponibles (relacion de aspecto -> tamano en pixeles).
+#   "9:16" -> vertical (Reels / TikTok / Shorts)
+#   "16:9" -> horizontal (YouTube clasico)
+#   "1:1"  -> cuadrado (feed de Instagram / Facebook)
+ASPECT_RESOLUTIONS = {
+    "9:16": (1080, 1920),
+    "16:9": (1920, 1080),
+    "1:1": (1080, 1080),
+}
+
+
+def resolution_for(aspect: str | None) -> tuple[int, int]:
+    """Devuelve (ancho, alto) en pixeles para el formato pedido (por defecto 9:16)."""
+    return ASPECT_RESOLUTIONS.get((aspect or "9:16").strip(), (VIDEO_W, VIDEO_H))
+
 
 @dataclass
 class AssembleResult:
@@ -88,6 +103,8 @@ def _make_clip(
     duration: float,
     out_clip: Path,
     zoom_in: bool,
+    video_w: int = VIDEO_W,
+    video_h: int = VIDEO_H,
 ) -> None:
     """Crea un clip de video a partir de una imagen, con zoom suave."""
     frames = max(1, int(round(duration * FPS)))
@@ -97,12 +114,12 @@ def _make_clip(
     else:
         z_expr = "if(lte(zoom,1.0),1.18,max(1.0,zoom-0.0010))"
 
-    # Escalamos grande primero para que el zoom no pixele, recortamos a 9:16,
-    # aplicamos zoompan y fijamos tamano final.
+    # Escalamos grande primero para que el zoom no pixele, recortamos al formato
+    # elegido, aplicamos zoompan y fijamos tamano final.
     vf = (
-        f"scale={VIDEO_W*2}:{VIDEO_H*2}:force_original_aspect_ratio=increase,"
-        f"crop={VIDEO_W*2}:{VIDEO_H*2},"
-        f"zoompan=z='{z_expr}':d={frames}:s={VIDEO_W}x{VIDEO_H}:fps={FPS},"
+        f"scale={video_w*2}:{video_h*2}:force_original_aspect_ratio=increase,"
+        f"crop={video_w*2}:{video_h*2},"
+        f"zoompan=z='{z_expr}':d={frames}:s={video_w}x{video_h}:fps={FPS},"
         f"setsar=1,format=yuv420p"
     )
     cmd = [
@@ -128,6 +145,7 @@ def build_video(
     image_durations: list[float] | None = None,
     music_path: Path | None = None,
     music_volume: float = 0.15,
+    resolution: tuple[int, int] = (VIDEO_W, VIDEO_H),
 ) -> AssembleResult:
     """
     Ensambla el video final y lo guarda en out_path.
@@ -141,8 +159,11 @@ def build_video(
                       imagen con su escena. Si es None, se reparte por igual.
     music_path      : musica de fondo opcional (la voz manda; la musica va baja).
     music_volume    : volumen de la musica (0.0 a 1.0). La voz se mantiene a 1.0.
+    resolution      : (ancho, alto) del video final. Por defecto 1080x1920 (9:16).
+                      Tambien admite 1920x1080 (16:9) y 1080x1080 (1:1).
     """
     ffmpeg = find_ffmpeg()
+    video_w, video_h = resolution
     work_dir = Path(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
     out_path = Path(out_path)
@@ -172,7 +193,10 @@ def build_video(
     clip_paths: list[Path] = []
     for i, img in enumerate(images):
         clip = clips_dir / f"clip_{i:02d}.mp4"
-        _make_clip(ffmpeg, Path(img), per_image_list[i], clip, zoom_in=(i % 2 == 0))
+        _make_clip(
+            ffmpeg, Path(img), per_image_list[i], clip,
+            zoom_in=(i % 2 == 0), video_w=video_w, video_h=video_h,
+        )
         clip_paths.append(clip)
 
     # 2) Concatenar los clips
@@ -218,17 +242,23 @@ def build_video(
     filters = []
     last = "0:v"
 
+    # Tamanos y margenes RELATIVOS al formato (asi se ven bien en 9:16, 16:9 y 1:1)
+    margin_x = max(20, int(video_w * 0.045))
+    margin_y = max(20, int(video_h * 0.045))
+    avatar_w = max(220, int(video_w * 0.22))
+    logo_w = max(110, int(video_w * 0.18))
+
     if avatar_idx is not None:
-        # Avatar como circulo pequeno arriba-derecha (estilo "talking head")
+        # Avatar como cabeza parlante pequena en la esquina superior derecha
         filters.append(
-            f"[{avatar_idx}:v]scale=420:-1,setsar=1[av]"
+            f"[{avatar_idx}:v]scale={avatar_w}:-1,setsar=1[av]"
         )
-        filters.append(f"[{last}][av]overlay=W-w-50:80[vav]")
+        filters.append(f"[{last}][av]overlay=W-w-{margin_x}:{margin_y}[vav]")
         last = "vav"
 
     if logo_idx is not None:
-        filters.append(f"[{logo_idx}:v]scale=200:-1[lg]")
-        filters.append(f"[{last}][lg]overlay=W-w-40:H-h-40[vlogo]")
+        filters.append(f"[{logo_idx}:v]scale={logo_w}:-1[lg]")
+        filters.append(f"[{last}][lg]overlay=W-w-{margin_x}:H-h-{margin_y}[vlogo]")
         last = "vlogo"
 
     if subtitles_path:

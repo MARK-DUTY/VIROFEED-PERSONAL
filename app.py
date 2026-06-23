@@ -171,6 +171,7 @@ def api_prepare():
         "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
         "music_mode": data.get("music_mode") or "auto",
         "music_volume": float(data.get("music_volume") or 0.15),
+        "aspect": data.get("aspect") or "9:16",
     }
     JOBS[job_id] = {
         "status": "running", "phase": "preparing", "message": "Iniciando...",
@@ -238,6 +239,7 @@ def api_prepare_youtube():
         "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
         "music_mode": data.get("music_mode") or "auto",
         "music_volume": float(data.get("music_volume") or 0.15),
+        "aspect": data.get("aspect") or "9:16",
     }
     JOBS[job_id] = {
         "status": "running", "phase": "preparing", "message": "Iniciando...",
@@ -305,6 +307,7 @@ def api_draft_story():
         "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
         "music_mode": data.get("music_mode") or "auto",
         "music_volume": float(data.get("music_volume") or 0.15),
+        "aspect": data.get("aspect") or "9:16",
     }
     JOBS[job_id] = {
         "status": "running", "phase": "drafting", "message": "Iniciando...",
@@ -597,6 +600,7 @@ def _run_assemble(job_id: str) -> None:
             voice=options.get("override_voice") or None,
             music_mode=options.get("music_mode", "auto"),
             music_volume=float(options.get("music_volume", 0.15)),
+            aspect=options.get("aspect", "9:16"),
             progress=progress,
         )
         job["status"] = "done"
@@ -676,7 +680,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 15 (musica confiable + voz/avatar en revision)")
+    print("  VERSION DEL CODIGO: 16 (formatos 9:16/16:9/1:1 + videos hasta 5 min)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)

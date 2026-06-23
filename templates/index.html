@@ -67,14 +67,35 @@
 
       <div class="row">
         <label class="field">
+          <span>Formato del video</span>
+          <select id="aspect">
+            <option value="9:16" selected>📱 Vertical 9:16 (Reels / TikTok / Shorts)</option>
+            <option value="16:9">🖥️ Horizontal 16:9 (YouTube)</option>
+            <option value="1:1">⬛ Cuadrado 1:1 (Feed Instagram / Facebook)</option>
+          </select>
+        </label>
+
+        <label class="field">
           <span>Duracion</span>
           <select id="duration">
             <option value="30" {% if defaults.duration==30 %}selected{% endif %}>30 segundos</option>
             <option value="45" {% if defaults.duration==45 %}selected{% endif %}>45 segundos</option>
-            <option value="60" {% if defaults.duration==60 %}selected{% endif %}>60 segundos</option>
+            <option value="60" {% if defaults.duration==60 %}selected{% endif %}>60 segundos (1 min)</option>
+            <option value="90" {% if defaults.duration==90 %}selected{% endif %}>90 segundos (1.5 min)</option>
+            <option value="120" {% if defaults.duration==120 %}selected{% endif %}>2 minutos</option>
+            <option value="180" {% if defaults.duration==180 %}selected{% endif %}>3 minutos</option>
+            <option value="300" {% if defaults.duration==300 %}selected{% endif %}>5 minutos</option>
           </select>
         </label>
+      </div>
 
+      <p class="hint hidden" id="long-video-warning">
+        ⏳ <strong>Ojo:</strong> los videos largos (2 minutos o más) pueden tardar
+        <strong>varios minutos</strong> en generarse en tu PC (no tiene tarjeta gráfica
+        dedicada). El video saldrá bien, solo ten paciencia mientras se arma.
+      </p>
+
+      <div class="row">
         <label class="field" id="style-field">
           <span>Estilo del guion (noticia y YouTube)</span>
           <select id="style">

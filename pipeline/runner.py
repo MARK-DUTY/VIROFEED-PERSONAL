@@ -25,7 +25,7 @@ try:
 except Exception:  # si falta music.py, el programa sigue funcionando (sin musica automatica)
     music_mod = None
 from .article import extract_article
-from .assemble import build_video, probe_duration
+from .assemble import build_video, probe_duration, resolution_for
 from .config import settings
 from .images import ImageResult, fetch_scene_images, fetch_single_image
 from .script_gen import Scene, generate_script, generate_script_from_story
@@ -566,10 +566,14 @@ def assemble_prepared(
     voice: str | None = None,
     music_mode: str = "auto",
     music_volume: float = 0.15,
+    aspect: str = "9:16",
     progress: ProgressFn = _noop,
 ) -> VideoJobResult:
     cfg = settings
     job_dir = prepared.job_dir
+
+    # Formato del video (9:16 vertical, 16:9 horizontal, 1:1 cuadrado)
+    video_w, video_h = resolution_for(aspect)
 
     # ¿El usuario eligio una voz distinta en la pantalla de revision?
     # (puede ser "hombre", "mujer", "automatica" o un nombre de voz concreto)
@@ -605,11 +609,15 @@ def assemble_prepared(
     sub_style = SubtitleStyle(name=subtitle_color, position=subtitle_position)
     if prepared.audio_words:
         print(f"[subtitulos] {len(prepared.audio_words)} palabras con tiempos exactos")
-        subs = build_ass_subtitles(prepared.audio_words, job_dir / "subtitles.ass", style=sub_style)
+        subs = build_ass_subtitles(
+            prepared.audio_words, job_dir / "subtitles.ass", style=sub_style,
+            video_w=video_w, video_h=video_h,
+        )
     else:
         print("[subtitulos] usando Plan B (reparto por texto)")
         subs = build_subtitles_from_text(
-            prepared.narration, prepared.real_duration, job_dir / "subtitles.ass", style=sub_style
+            prepared.narration, prepared.real_duration, job_dir / "subtitles.ass",
+            style=sub_style, video_w=video_w, video_h=video_h,
         )
 
     # Avatar opcional
@@ -664,6 +672,7 @@ def assemble_prepared(
         image_durations=img_durations,
         music_path=music_file,
         music_volume=music_volume,
+        resolution=(video_w, video_h),
     )
 
     progress("Listo!", 100)

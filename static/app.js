@@ -53,6 +53,7 @@ function sharedOptions() {
   imageSourceChosen = $("image_source").value;
   return {
     duration: $("duration").value,
+    aspect: $("aspect") ? $("aspect").value : "9:16",
     style: $("style").value,
     voice: $("voice").value,
     subtitle_color: $("subtitle_color").value,
@@ -61,6 +62,15 @@ function sharedOptions() {
     cta: $("cta").value,
     use_avatar: $("use_avatar").checked,
   };
+}
+
+// Muestra un aviso cuando el usuario elige un video largo (2 min o mas),
+// porque en su PC (sin tarjeta grafica) tardara varios minutos en armarse.
+function refreshLongVideoWarning() {
+  const warn = $("long-video-warning");
+  if (!warn) return;
+  const secs = parseInt($("duration").value, 10) || 0;
+  warn.classList.toggle("hidden", secs < 120);
 }
 
 // El boton principal decide segun la pestana activa
@@ -586,3 +596,9 @@ $("new-btn").addEventListener("click", () => show(formCard));
 $("retry-btn").addEventListener("click", () => show(formCard));
 
 setupMusicControls();
+
+// Aviso de video largo: revisar al cargar y cada vez que cambie la duracion
+if ($("duration")) {
+  $("duration").addEventListener("change", refreshLongVideoWarning);
+  refreshLongVideoWarning();
+}
