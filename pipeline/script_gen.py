@@ -27,6 +27,12 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Cuantas palabras caben aproximadamente segun la duracion (locucion ~2.6 pal/seg)
 _WORDS_PER_SECOND = 2.6
 
+
+def _tokens_for(duration: int) -> int:
+    """Cuanto 'espacio' de respuesta darle a la IA segun la duracion del video.
+    Videos largos necesitan mas tokens para no cortarse a la mitad."""
+    return int(min(8000, max(2500, 1500 + duration * 14)))
+
 _STYLE_DESC = {
     "breaking": "estilo NOTICIA DE ULTIMO MINUTO, urgente y con gancho",
     "resumen": "estilo RESUMEN RAPIDO, claro y directo",
@@ -60,7 +66,11 @@ class VideoScript:
 def _build_prompt(article: Article, duration: int, style: str, cta: str) -> list[dict]:
     target_words = int(duration * _WORDS_PER_SECOND)
     style_desc = _STYLE_DESC.get(style, _STYLE_DESC["breaking"])
-    n_scenes = max(4, min(9, round(duration / 6)))
+    # ~1 escena cada 8 segundos. Permitimos hasta 35 escenas para videos largos
+    # (4-5 minutos) sin que cada imagen se quede demasiado tiempo fija.
+    n_scenes = max(4, min(35, round(duration / 8)))
+    # Para videos largos le damos mas texto de la noticia a la IA (mas material).
+    src_chars = min(16000, max(6000, target_words * 25))
 
     system = (
         "Eres un guionista experto en videos cortos virales (Reels, TikTok, "
@@ -76,7 +86,7 @@ TITULO DE LA NOTICIA:
 {article.title}
 
 CONTENIDO DE LA NOTICIA:
-{article.text[:6000]}
+{article.text[:src_chars]}
 
 REQUISITOS:
 - Idioma del guion (campo "text"): espanol latino, cercano y natural.
@@ -190,7 +200,7 @@ def _extract_json(content: str) -> dict:
         raise
 
 
-def _call_groq(messages: list[dict], timeout: int = 60) -> dict:
+def _call_groq(messages: list[dict], timeout: int = 60, max_tokens: int = 2500) -> dict:
     """Envia los mensajes a Groq y devuelve el JSON ya parseado (dict)."""
     if not settings.groq_api_key or settings.groq_api_key.startswith("PEGA_AQUI"):
         raise ValueError(
@@ -202,7 +212,7 @@ def _call_groq(messages: list[dict], timeout: int = 60) -> dict:
         "model": settings.groq_model,
         "messages": messages,
         "temperature": 0.8,
-        "max_tokens": 2500,
+        "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
     }
     headers = {
@@ -273,7 +283,7 @@ def generate_script(
     cta = cta or settings.call_to_action
 
     messages = _build_prompt(article, duration, style, cta)
-    parsed = _call_groq(messages, timeout=timeout)
+    parsed = _call_groq(messages, timeout=timeout, max_tokens=_tokens_for(duration))
     return _parse_script(parsed)
 
 
@@ -300,5 +310,5 @@ def generate_script_from_story(
     n_images = max(8, int(n_images or 8))
 
     messages = _build_story_prompt(story, duration, n_images, cta)
-    parsed = _call_groq(messages, timeout=timeout)
+    parsed = _call_groq(messages, timeout=timeout, max_tokens=_tokens_for(duration))
     return _parse_script(parsed)

@@ -96,9 +96,13 @@ def build_ass_subtitles(
     colors = SUBTITLE_STYLES.get(style.name, SUBTITLE_STYLES["amarillo"])
 
     # Posicion vertical EXACTA (centro del bloque de texto), en pixeles.
-    # Partimos de la posicion base y la bajamos 'drop_px' (por defecto ~4 cm).
+    # Partimos de la posicion base y la bajamos 'drop_px'. Como drop_px esta
+    # pensado para video vertical (1920px de alto), lo escalamos en proporcion
+    # a la altura real para que en 16:9 (1080px) o 1:1 (1080px) el subtitulo
+    # quede a la MISMA altura relativa y no se salga de la pantalla.
     center_x = video_w // 2
-    target_y = _base_y(style.position, video_h) + max(0, style.drop_px)
+    drop = int(max(0, style.drop_px) * (video_h / 1920))
+    target_y = _base_y(style.position, video_h) + drop
     # Evitamos que se salga de la pantalla (dejamos margen arriba y abajo).
     target_y = max(int(video_h * 0.12), min(target_y, int(video_h * 0.90)))
 
