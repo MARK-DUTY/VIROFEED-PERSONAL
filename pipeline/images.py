@@ -114,9 +114,14 @@ def _download(url: str, dest: Path, timeout: int = 60) -> bool:
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=timeout, stream=True)
         resp.raise_for_status()
-        ctype = resp.headers.get("Content-Type", "")
-        if "image" not in ctype and not str(dest).endswith((".jpg", ".png")):
-            # Si no es imagen, descartamos
+        ctype = resp.headers.get("Content-Type", "").lower()
+        # Aceptamos imagenes Y videos. Antes solo se aceptaban imagenes, por lo
+        # que TODA descarga de video (.mp4) se rechazaba y el video terminaba
+        # cayendo en una imagen de IA. Ahora reconocemos ambos.
+        ok_ext = str(dest).lower().endswith(
+            (".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm", ".m4v")
+        )
+        if "image" not in ctype and "video" not in ctype and not ok_ext:
             return False
         with open(dest, "wb") as f:
             for chunk in resp.iter_content(chunk_size=8192):
@@ -414,15 +419,18 @@ def _pick_pexels_video_file(video: dict) -> str | None:
 
 
 def _search_pexels_video(query: str, want: int = 6) -> list[str]:
-    """Busca videoclips verticales en Pexels. Devuelve URLs de archivos .mp4."""
+    """Busca videoclips en Pexels. Devuelve URLs de archivos .mp4.
+
+    NO forzamos orientacion vertical: los bancos de video tienen MUCHISIMOS mas
+    clips horizontales que verticales, y de todos modos el ensamblaje recorta el
+    clip al formato elegido. Asi encontramos video para muchas mas escenas.
+    """
     if not settings.pexels_api_key or settings.pexels_api_key.startswith("PEGA_AQUI"):
         return []
     headers = {"Authorization": settings.pexels_api_key}
     params = {
         "query": query,
-        "per_page": min(40, max(10, want * 2)),
-        "orientation": "portrait",
-        "size": "medium",
+        "per_page": min(50, max(15, want * 3)),
     }
     try:
         resp = requests.get(PEXELS_VIDEO_SEARCH, headers=headers, params=params, timeout=25)
@@ -499,13 +507,26 @@ def _make_one_video(
     dest: Path,
     used_urls: set[str],
 ) -> ImageResult | None:
-    """Consigue UN videoclip de stock para una escena (verticales, gratis)."""
+    """Consigue UN videoclip de stock para una escena.
+
+    Los bancos de video tienen MENOS material que los de fotos, asi que probamos
+    de lo MAS ESPECIFICO a lo MAS GENERAL: la palabra clave corta primero, luego
+    el prompt, y al final solo 1-2 palabras (para casi siempre encontrar algo).
+    """
     queries: list[str] = []
-    prompt_query = _prompt_to_query(image_prompt)
-    if prompt_query:
-        queries.append(prompt_query)
-    if keyword and keyword.lower() not in [q.lower() for q in queries]:
-        queries.append(keyword)
+
+    def _add(q: str | None) -> None:
+        q = (q or "").strip()
+        if q and q.lower() not in [x.lower() for x in queries]:
+            queries.append(q)
+
+    _add(keyword)                          # corto y amplio: lo mejor para video
+    _add(_prompt_to_query(image_prompt))   # palabras clave del prompt
+    if keyword:
+        words = keyword.split()
+        _add(" ".join(words[:2]))          # solo las 2 primeras palabras
+        _add(words[0])                     # solo la primera (muy general)
+
     for q in queries:
         got = _download_stock_video(q, dest, used_urls)
         if got:
@@ -558,7 +579,9 @@ def fetch_scene_videos(
 
         got = _make_one_video(scene.image_prompt, scene.keyword, dest, used_urls)
 
-        # Si no hubo clip: reutilizamos el anterior; si no, caemos a una foto.
+        # Si no hubo clip: reutilizamos el anterior; si no, caemos a una FOTO REAL
+        # (stock), NO a una imagen de IA: en modo video/mixto el usuario quiere
+        # material real, no generado.
         if got is None and results and results[-1].is_video:
             prev = results[-1]
             try:
@@ -568,7 +591,7 @@ def fetch_scene_videos(
                 got = None
         if got is None:
             img_dest = dest_dir / f"img_{i:02d}.jpg"
-            got = _make_one(scene.image_prompt, scene.keyword, img_dest, "hybrid", set(), seed=1000 + i)
+            got = _make_one(scene.image_prompt, scene.keyword, img_dest, "stock", set(), seed=1000 + i)
 
         if got is not None:
             results.append(got)

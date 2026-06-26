@@ -313,9 +313,42 @@ def prepare_youtube(
     Igual que prepare_video, pero el texto sale de uno o VARIOS VIDEOS DE YOUTUBE
     (sus subtitulos) en vez de una noticia. El resto del flujo es identico.
     """
-    # Import "perezoso": asi runner.py se importa bien aunque youtube.py todavia
-    # no se haya descargado (la auto-reparacion de app.py lo trae al arrancar).
-    from .youtube import extract_youtubes
+    # Import "perezoso" y RESILIENTE: si tu youtube.py quedo viejo y todavia no
+    # tiene `extract_youtubes` (la que combina varios videos), lo EMULAMOS usando
+    # `extract_youtube` (uno por uno). Asi el modo YouTube funciona aunque no se
+    # haya actualizado ese archivo en tu PC.
+    try:
+        from .youtube import extract_youtubes
+    except ImportError:
+        from .youtube import extract_youtube
+
+        def extract_youtubes(yt_urls, timeout=25):
+            yt_urls = [u.strip() for u in (yt_urls or []) if u and u.strip()]
+            if not yt_urls:
+                raise ValueError("No diste ningun enlace de YouTube.")
+            if len(yt_urls) == 1:
+                return extract_youtube(yt_urls[0], timeout=timeout)
+            from .article import Article
+            title = ""
+            parts: list[str] = []
+            errors: list[str] = []
+            for u in yt_urls:
+                try:
+                    art = extract_youtube(u, timeout=timeout)
+                    if not title:
+                        title = art.title
+                    parts.append(art.text)
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"- {u}: {exc}")
+            if not parts:
+                raise ValueError(
+                    "No pude leer NINGUNO de los videos de YouTube. Revisa que "
+                    "tengan subtitulos. Detalle:\n" + "\n".join(errors)
+                )
+            return Article(
+                url=yt_urls[0], title=title or "Video de YouTube",
+                text="\n\n".join(parts),
+            )
 
     cfg = settings
     # `url` puede ser un solo enlace (texto) o varios (lista). Normalizamos.

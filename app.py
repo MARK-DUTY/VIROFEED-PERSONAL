@@ -28,19 +28,31 @@ from werkzeug.utils import secure_filename
 #  archivo faltante.
 # --------------------------------------------------------------------------
 _RAW_BASE = "https://raw.githubusercontent.com/MARK-DUTY/VIROFEED-PERSONAL/main"
-_REQUIRED_FILES = ["pipeline/music.py", "pipeline/youtube.py"]
+# Archivos que deben existir y, si aplica, CONTENER cierta funcion nueva.
+# Si el archivo falta O quedo viejo (no tiene esa funcion), lo volvemos a bajar.
+# Asi, si a alguien se le quedo un archivo viejo, el programa se auto-repara solo.
+_REQUIRED_FILES = {
+    "pipeline/music.py": None,
+    "pipeline/youtube.py": "def extract_youtubes",
+}
 
 
 def _self_repair() -> None:
     import urllib.request
     here = Path(__file__).resolve().parent
-    for rel in _REQUIRED_FILES:
+    for rel, marker in _REQUIRED_FILES.items():
         dest = here / rel
-        if dest.exists():
+        needs = not dest.exists()
+        if not needs and marker:
+            try:
+                needs = marker not in dest.read_text(encoding="utf-8", errors="ignore")
+            except Exception:  # noqa: BLE001
+                needs = True
+        if not needs:
             continue
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)
-            print(f"[auto-reparacion] falta {rel}, descargandolo desde GitHub...")
+            print(f"[auto-reparacion] actualizando {rel} desde GitHub...")
             urllib.request.urlretrieve(f"{_RAW_BASE}/{rel}", str(dest))
             print(f"[auto-reparacion] listo: {rel}")
         except Exception as exc:  # noqa: BLE001
@@ -723,7 +735,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 18 (lector de YouTube resistente a bloqueos)")
+    print("  VERSION DEL CODIGO: 20 (menu de medios 3 opciones + videos + YouTube a prueba de fallos)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)
