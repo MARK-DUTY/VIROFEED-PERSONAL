@@ -53,6 +53,7 @@ function sharedOptions() {
   imageSourceChosen = $("image_source").value;
   return {
     duration: $("duration").value,
+    n_images: $("n_images") ? $("n_images").value : "auto",
     aspect: $("aspect") ? $("aspect").value : "9:16",
     style: $("style").value,
     voice: $("voice").value,
@@ -164,7 +165,6 @@ async function startDraft() {
 
   const payload = {
     story,
-    n_images: $("n_images").value,
     ...sharedOptions(),
   };
 
