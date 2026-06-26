@@ -157,6 +157,42 @@ def _make_clip(
     _run(cmd)
 
 
+def _make_clip_from_video(
+    ffmpeg: str,
+    video: Path,
+    duration: float,
+    out_clip: Path,
+    video_w: int = VIDEO_W,
+    video_h: int = VIDEO_H,
+) -> None:
+    """
+    Crea un clip a partir de un VIDEOCLIP de stock, ajustado al formato y a la
+    duracion de la escena.
+
+    - Si el clip original es mas CORTO que la escena, lo repetimos (-stream_loop)
+      para que llene todo el tiempo.
+    - Si es mas LARGO, lo cortamos con -t.
+    - Lo escalamos y recortamos al formato elegido (9:16, 16:9 o 1:1) y le
+      quitamos su audio (-an): el video lleva nuestra voz, no la del clip.
+    """
+    vf = (
+        f"scale={video_w}:{video_h}:force_original_aspect_ratio=increase,"
+        f"crop={video_w}:{video_h},"
+        f"setsar=1,fps={FPS},format=yuv420p"
+    )
+    cmd = [
+        ffmpeg, "-y",
+        "-stream_loop", "-1", "-i", str(video),
+        "-t", f"{duration:.3f}",
+        "-an",
+        "-vf", vf,
+        "-r", str(FPS),
+        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+        str(out_clip),
+    ]
+    _run(cmd)
+
+
 def build_video(
     images: list[Path],
     audio_path: Path,
@@ -170,6 +206,7 @@ def build_video(
     music_path: Path | None = None,
     music_volume: float = 0.15,
     resolution: tuple[int, int] = (VIDEO_W, VIDEO_H),
+    media_is_video: list[bool] | None = None,
 ) -> AssembleResult:
     """
     Ensambla el video final y lo guarda en out_path.
@@ -211,16 +248,23 @@ def build_video(
     else:
         per_image_list = [duration / n] * n
 
-    # 1) Crear un clip por imagen
+    # 1) Crear un clip por imagen (o por videoclip si esa escena trae video)
     clips_dir = work_dir / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
     clip_paths: list[Path] = []
     for i, img in enumerate(images):
         clip = clips_dir / f"clip_{i:02d}.mp4"
-        _make_clip(
-            ffmpeg, Path(img), per_image_list[i], clip,
-            zoom_in=(i % 2 == 0), video_w=video_w, video_h=video_h,
-        )
+        is_vid = bool(media_is_video[i]) if (media_is_video and i < len(media_is_video)) else False
+        if is_vid:
+            _make_clip_from_video(
+                ffmpeg, Path(img), per_image_list[i], clip,
+                video_w=video_w, video_h=video_h,
+            )
+        else:
+            _make_clip(
+                ffmpeg, Path(img), per_image_list[i], clip,
+                zoom_in=(i % 2 == 0), video_w=video_w, video_h=video_h,
+            )
         clip_paths.append(clip)
 
     # 2) Concatenar los clips

@@ -27,7 +27,9 @@ from .config import settings
 from .script_gen import Scene
 
 PEXELS_SEARCH = "https://api.pexels.com/v1/search"
+PEXELS_VIDEO_SEARCH = "https://api.pexels.com/videos/search"
 PIXABAY_SEARCH = "https://pixabay.com/api/"
+PIXABAY_VIDEO_SEARCH = "https://pixabay.com/api/videos/"
 UNSPLASH_SEARCH = "https://api.unsplash.com/search/photos"
 OPENVERSE_SEARCH = "https://api.openverse.org/v1/images/"
 POLLINATIONS = "https://image.pollinations.ai/prompt/"
@@ -105,6 +107,7 @@ class ImageResult:
     source: str       # "ai" | "pexels" | "pixabay"
     query: str        # con que descripcion/keyword se obtuvo
     url: str = ""     # URL original de la foto (para no repetirla al pulsar "Otra foto")
+    is_video: bool = False   # True si 'path' es un videoclip .mp4 (en vez de una foto)
 
 
 def _download(url: str, dest: Path, timeout: int = 60) -> bool:
@@ -368,6 +371,214 @@ def _download_stock(query: str, dest: Path, used_urls: set[str], want: int = 12)
             used_urls.add(url)
             return source, url
     return None
+
+
+# --------------------------------------------------------------------------
+#  VIDEOCLIPS de stock (Pexels / Pixabay) - clips cortos reales, GRATIS
+# --------------------------------------------------------------------------
+#  En vez de una foto fija, conseguimos un videoclip corto (con movimiento) que
+#  concuerde con la escena. Se usa cuando el usuario elige "Videoclips" como
+#  fondo. Necesita clave de Pexels o Pixabay (las mismas que ya usas para fotos).
+#
+#  Nota: la "IA que crea videos de 10 segundos" hoy NO tiene una opcion gratis
+#  por API que se pueda automatizar sin tarjeta. Por eso usamos videoclips
+#  reales de stock (gratis e ilimitados con tu clave), que dan el mismo efecto
+#  de movimiento en el video.
+
+# Solo aceptamos clips que no sean larguisimos (para descargas rapidas).
+_MAX_VIDEO_SECONDS = 40
+
+
+def _pick_pexels_video_file(video: dict) -> str | None:
+    """De un video de Pexels, elige el mejor archivo VERTICAL de calidad media."""
+    files = video.get("video_files") or []
+    portrait = []
+    for f in files:
+        link = f.get("link")
+        w = f.get("width") or 0
+        h = f.get("height") or 0
+        if not link or not w or not h:
+            continue
+        # Preferimos verticales (alto > ancho) y resolucion razonable (no 4K gigante).
+        is_portrait = h >= w
+        portrait.append((is_portrait, h, w, link))
+    if not portrait:
+        return None
+    # Primero verticales; dentro de esos, una altura "buena" (cerca de 1280-1920).
+    def score(item):
+        is_portrait, h, w, _link = item
+        target = 1280
+        return (1 if is_portrait else 0, -abs(h - target))
+    portrait.sort(key=score, reverse=True)
+    return portrait[0][3]
+
+
+def _search_pexels_video(query: str, want: int = 6) -> list[str]:
+    """Busca videoclips verticales en Pexels. Devuelve URLs de archivos .mp4."""
+    if not settings.pexels_api_key or settings.pexels_api_key.startswith("PEGA_AQUI"):
+        return []
+    headers = {"Authorization": settings.pexels_api_key}
+    params = {
+        "query": query,
+        "per_page": min(40, max(10, want * 2)),
+        "orientation": "portrait",
+        "size": "medium",
+    }
+    try:
+        resp = requests.get(PEXELS_VIDEO_SEARCH, headers=headers, params=params, timeout=25)
+        if resp.status_code != 200:
+            return []
+        videos = resp.json().get("videos", [])
+        urls = []
+        for v in videos:
+            if (v.get("duration") or 0) > _MAX_VIDEO_SECONDS:
+                continue
+            link = _pick_pexels_video_file(v)
+            if link:
+                urls.append(link)
+        return urls
+    except requests.RequestException:
+        return []
+
+
+def _search_pixabay_video(query: str, want: int = 6) -> list[str]:
+    """Busca videoclips verticales en Pixabay. Devuelve URLs de archivos .mp4."""
+    if not settings.pixabay_api_key:
+        return []
+    params = {
+        "key": settings.pixabay_api_key,
+        "q": query,
+        "video_type": "all",
+        "per_page": min(200, max(10, want * 2)),
+        "safesearch": "true",
+    }
+    try:
+        resp = requests.get(PIXABAY_VIDEO_SEARCH, params=params, timeout=25)
+        if resp.status_code != 200:
+            return []
+        hits = resp.json().get("hits", [])
+        urls = []
+        for h in hits:
+            if (h.get("duration") or 0) > _MAX_VIDEO_SECONDS:
+                continue
+            vids = h.get("videos") or {}
+            # Preferimos una resolucion media para descargar rapido.
+            choice = vids.get("medium") or vids.get("large") or vids.get("small") or vids.get("tiny")
+            url = (choice or {}).get("url")
+            if url:
+                urls.append(url)
+        return urls
+    except requests.RequestException:
+        return []
+
+
+def _download_stock_video(
+    query: str, dest: Path, used_urls: set[str], want: int = 6
+) -> tuple[str, str] | None:
+    """
+    Descarga un videoclip de stock para la query, saltando los ya usados.
+    Devuelve (fuente, url) o None. Mezcla Pexels y Pixabay para mas variedad.
+    """
+    candidates = (
+        [(u, "pexels-video") for u in _search_pexels_video(query, want)]
+        + [(u, "pixabay-video") for u in _search_pixabay_video(query, want)]
+    )
+    for url, source in candidates:
+        if not url or url in used_urls:
+            continue
+        # Los videos son mas pesados: damos mas tiempo de descarga.
+        if _download(url, dest, timeout=120):
+            used_urls.add(url)
+            return source, url
+    return None
+
+
+def _make_one_video(
+    image_prompt: str,
+    keyword: str,
+    dest: Path,
+    used_urls: set[str],
+) -> ImageResult | None:
+    """Consigue UN videoclip de stock para una escena (verticales, gratis)."""
+    queries: list[str] = []
+    prompt_query = _prompt_to_query(image_prompt)
+    if prompt_query:
+        queries.append(prompt_query)
+    if keyword and keyword.lower() not in [q.lower() for q in queries]:
+        queries.append(keyword)
+    for q in queries:
+        got = _download_stock_video(q, dest, used_urls)
+        if got:
+            source, url = got
+            return ImageResult(path=dest, source=source, query=q, url=url, is_video=True)
+    return None
+
+
+def fetch_single_video(
+    image_prompt: str,
+    keyword: str,
+    dest: Path,
+    used_urls: set[str] | None = None,
+) -> ImageResult | None:
+    """Consigue UN solo videoclip (se usa al pulsar 'Otro videoclip' en la revision)."""
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    used: set[str] = used_urls if used_urls is not None else set()
+    return _make_one_video(image_prompt, keyword, dest, used)
+
+
+def fetch_scene_videos(
+    scenes: list[Scene],
+    dest_dir: Path,
+    progress=None,
+) -> list[ImageResult]:
+    """
+    Consigue un VIDEOCLIP por cada escena (en vez de una foto). Si una escena
+    no consigue clip, reutiliza el anterior; si no hay ninguno, cae a FOTO para
+    no romper el video. Asi el video siempre se arma.
+    """
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    if (not settings.pexels_api_key or settings.pexels_api_key.startswith("PEGA_AQUI")) \
+            and not settings.pixabay_api_key:
+        raise ValueError(
+            "Para usar VIDEOCLIPS necesitas una clave de Pexels o Pixabay en tu "
+            "archivo .env (son gratis). Mientras tanto, elige 'Fotos' como fondo."
+        )
+
+    results: list[ImageResult] = []
+    used_urls: set[str] = set()
+    total = len(scenes)
+
+    for i, scene in enumerate(scenes):
+        dest = dest_dir / f"vid_{i:02d}.mp4"
+        if progress:
+            progress(f"Videoclip {i + 1} de {total}...", 58 + int(8 * (i / max(1, total))))
+
+        got = _make_one_video(scene.image_prompt, scene.keyword, dest, used_urls)
+
+        # Si no hubo clip: reutilizamos el anterior; si no, caemos a una foto.
+        if got is None and results and results[-1].is_video:
+            prev = results[-1]
+            try:
+                dest.write_bytes(prev.path.read_bytes())
+                got = ImageResult(path=dest, source=prev.source, query=scene.keyword, is_video=True)
+            except Exception:
+                got = None
+        if got is None:
+            img_dest = dest_dir / f"img_{i:02d}.jpg"
+            got = _make_one(scene.image_prompt, scene.keyword, img_dest, "hybrid", set(), seed=1000 + i)
+
+        if got is not None:
+            results.append(got)
+
+    if not results:
+        raise ValueError(
+            "No pude conseguir ningun videoclip ni foto. Revisa tu conexion a "
+            "internet y tu clave de Pexels/Pixabay."
+        )
+    return results
 
 
 def fetch_single_image(

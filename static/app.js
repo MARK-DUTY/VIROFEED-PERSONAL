@@ -60,9 +60,18 @@ function sharedOptions() {
     subtitle_color: $("subtitle_color").value,
     subtitle_position: $("subtitle_position").value,
     image_source: imageSourceChosen,
+    media_type: $("media_type") ? $("media_type").value : "image",
     cta: $("cta").value,
     use_avatar: $("use_avatar").checked,
   };
+}
+
+// Muestra el aviso de videoclips solo cuando el usuario elige ese tipo de fondo.
+function refreshMediaTypeHint() {
+  const sel = $("media_type");
+  const hint = $("video-bg-hint");
+  if (!sel || !hint) return;
+  hint.classList.toggle("hidden", sel.value !== "video");
 }
 
 // Muestra un aviso cuando el usuario elige un video largo (2 min o mas),
@@ -323,9 +332,27 @@ function renderReview(review) {
     card.className = "scene-card";
     card.id = `scene-${scene.index}`;
 
+    const isVid = !!scene.is_video;
+    // Vista previa: <video> si la escena es un videoclip, si no <img>.
+    const mediaEl = isVid
+      ? `<video class="scene-img" id="img-${scene.index}" src="${imgUrl(scene.image_file)}" muted loop autoplay playsinline></video>`
+      : `<img class="scene-img" id="img-${scene.index}" src="${imgUrl(scene.image_file)}" alt="escena ${scene.index + 1}">`;
+
+    const promptLabel = isVid
+      ? "🎞️ Descripción del clip (en inglés, para buscar otro videoclip)"
+      : "🖼️ Descripción de la imagen (en inglés)";
+
+    // Botones: en modo video ofrecemos "Otro videoclip"; en foto, IA + otra foto.
+    const mediaButtons = isVid
+      ? `<button class="btn-mini" data-act="video" data-i="${scene.index}">🔁 Otro videoclip</button>`
+      : `<button class="btn-mini btn-ai" data-act="ai" data-i="${scene.index}">🎨 Crear con mi texto (IA)</button>
+         <button class="btn-mini" data-act="stock" data-i="${scene.index}">🔁 Otra foto real</button>`;
+
+    const fileAccept = isVid ? "video/*,image/*" : "image/*";
+
     card.innerHTML = `
       <div class="scene-img-wrap">
-        <img class="scene-img" id="img-${scene.index}" src="${imgUrl(scene.image_file)}" alt="escena ${scene.index + 1}">
+        ${mediaEl}
         <span class="scene-badge" id="badge-${scene.index}">${scene.source}</span>
         <div class="scene-loading hidden" id="loading-${scene.index}">Generando...</div>
       </div>
@@ -333,16 +360,15 @@ function renderReview(review) {
       <textarea class="scene-dialogue" id="dialogue-${scene.index}" rows="3"
         title="Edita lo que se dice en esta escena">${escapeHtml(scene.text)}</textarea>
       <span class="scene-saved hidden" id="saved-${scene.index}">✔ Guardado</span>
-      <label class="scene-label">🖼️ Descripción de la imagen (en inglés)</label>
+      <label class="scene-label">${promptLabel}</label>
       <textarea class="scene-prompt" id="prompt-${scene.index}" rows="2" spellcheck="false"
-        title="Describe la imagen que quieres (en inglés). Luego pulsa 'Crear con mi texto (IA)'.">${escapeHtml(scene.image_prompt)}</textarea>
+        title="Describe lo que quieres (en inglés).">${escapeHtml(scene.image_prompt)}</textarea>
       <div class="scene-actions">
-        <button class="btn-mini btn-ai" data-act="ai" data-i="${scene.index}">🎨 Crear con mi texto (IA)</button>
-        <button class="btn-mini" data-act="stock" data-i="${scene.index}">🔁 Otra foto real</button>
+        ${mediaButtons}
         <button class="btn-mini" data-act="upload" data-i="${scene.index}">⬆️ Subir</button>
         <button class="btn-mini btn-danger" data-act="delete" data-i="${scene.index}">🗑️ Eliminar</button>
       </div>
-      <input type="file" accept="image/*" class="hidden" id="file-${scene.index}">
+      <input type="file" accept="${fileAccept}" class="hidden" id="file-${scene.index}">
     `;
     grid.appendChild(card);
   });
@@ -355,6 +381,8 @@ function renderReview(review) {
       btn.addEventListener("click", () => regenerate(i, "ai"));
     } else if (act === "stock") {
       btn.addEventListener("click", () => regenerate(i, "stock"));
+    } else if (act === "video") {
+      btn.addEventListener("click", () => regenerate(i, "video"));
     } else if (act === "upload") {
       btn.addEventListener("click", () => $(`file-${i}`).click());
     } else if (act === "delete") {
@@ -422,6 +450,33 @@ function setSceneLoading(i, on) {
   document.querySelectorAll(`#scene-${i} .btn-mini`).forEach((b) => (b.disabled = on));
 }
 
+// Reemplaza la vista previa de una escena por una NUEVA foto o videoclip.
+// Si cambia el tipo (p. ej. subiste un video donde habia foto), crea el
+// elemento correcto (<img> o <video>) en su lugar.
+function setSceneMedia(i, file, isVideo) {
+  const old = $(`img-${i}`);
+  if (!old) return;
+  const url = imgUrl(file);
+  let el;
+  if (isVideo) {
+    el = document.createElement("video");
+    el.muted = true;
+    el.loop = true;
+    el.autoplay = true;
+    el.setAttribute("playsinline", "");
+    el.onloadeddata = () => setSceneLoading(i, false);
+  } else {
+    el = document.createElement("img");
+    el.alt = "escena " + (i + 1);
+    el.onload = () => setSceneLoading(i, false);
+  }
+  el.className = "scene-img" + (old.classList.contains("is-loading") ? " is-loading" : "");
+  el.id = `img-${i}`;
+  el.onerror = () => setSceneLoading(i, false);
+  el.src = url;
+  old.replaceWith(el);
+}
+
 async function regenerate(i, mode) {
   attempts[i] = (attempts[i] || 0) + 1;
   const prompt = $(`prompt-${i}`).value.trim();
@@ -434,11 +489,8 @@ async function regenerate(i, mode) {
     });
     const data = await resp.json();
     if (!resp.ok) { alert(data.error || "No se pudo regenerar la imagen"); setSceneLoading(i, false); return; }
-    // Dejamos el girito hasta que la NUEVA foto se vea (asi notas el cambio).
-    const img = $(`img-${i}`);
-    img.onload = () => setSceneLoading(i, false);
-    img.onerror = () => setSceneLoading(i, false);
-    img.src = imgUrl(data.image_file);
+    // Dejamos el girito hasta que el NUEVO medio se vea (asi notas el cambio).
+    setSceneMedia(i, data.image_file, data.is_video);
     $(`badge-${i}`).textContent = data.source;
   } catch (e) {
     alert("Error al regenerar: " + e);
@@ -457,10 +509,7 @@ async function uploadImage(i, file) {
     const resp = await fetch("/api/upload_image", { method: "POST", body: fd });
     const data = await resp.json();
     if (!resp.ok) { alert(data.error || "No se pudo subir la imagen"); setSceneLoading(i, false); return; }
-    const img = $(`img-${i}`);
-    img.onload = () => setSceneLoading(i, false);
-    img.onerror = () => setSceneLoading(i, false);
-    img.src = imgUrl(data.image_file);
+    setSceneMedia(i, data.image_file, data.is_video);
     $(`badge-${i}`).textContent = data.source;
   } catch (e) {
     alert("Error al subir: " + e);
@@ -625,4 +674,10 @@ setupMusicControls();
 if ($("duration")) {
   $("duration").addEventListener("change", refreshLongVideoWarning);
   refreshLongVideoWarning();
+}
+
+// Aviso de videoclips: mostrarlo cuando el usuario elige "Videoclips" de fondo
+if ($("media_type")) {
+  $("media_type").addEventListener("change", refreshMediaTypeHint);
+  refreshMediaTypeHint();
 }

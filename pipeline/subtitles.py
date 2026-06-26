@@ -28,6 +28,11 @@ class SubtitleStyle:
     font_size: int = 88          # bien grandes, estilo viral (era 54, luego 64)
     position: str = "center"     # top | center | bottom
     words_per_group: int = 3
+    # Cuanto ADELANTAR los subtitulos respecto a la voz, en segundos.
+    # Edge TTS nos da el tiempo de cada palabra, pero al ver el video los
+    # subtitulos se pueden sentir "atrasados". Restamos este valor a los tiempos
+    # para que el texto aparezca justo cuando se empieza a decir (o un pelin antes).
+    lead_sec: float = 0.25
     # Cuanto BAJAR los subtitulos respecto a su posicion base, en pixeles.
     # El video mide 1920px de alto; ~75px equivale aprox. a 1 cm en pantalla.
     # 525px equivale aprox. a 7 cm mas abajo del centro (4 cm + 3 cm pedidos).
@@ -124,7 +129,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
     lines = [header]
+    # Adelantamos los subtitulos restando 'lead_sec' a sus tiempos, para que no
+    # se sientan atrasados respecto a la voz. Nunca dejamos tiempos negativos.
+    lead = max(0.0, float(getattr(style, "lead_sec", 0.0)))
     for start, end, text in _group_words(words, style.words_per_group):
+        start = max(0.0, start - lead)
+        end = max(start + 0.1, end - lead)
         text = _escape(text)
         # \pos coloca el texto en la posicion exacta; \fad da el fundido de entrada/salida
         dialogue = (

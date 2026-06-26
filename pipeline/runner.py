@@ -27,7 +27,7 @@ except Exception:  # si falta music.py, el programa sigue funcionando (sin music
 from .article import extract_article, extract_articles
 from .assemble import build_video, probe_duration, resolution_for
 from .config import settings
-from .images import ImageResult, fetch_scene_images, fetch_single_image
+from .images import ImageResult, fetch_scene_images, fetch_scene_videos, fetch_single_image, fetch_single_video
 from .script_gen import Scene, generate_script, generate_script_from_story
 from .subtitles import SubtitleStyle, build_ass_subtitles, build_subtitles_from_text
 from .voice import WordTiming, synthesize_voice
@@ -142,6 +142,8 @@ class PreparedJob:
     titles: list[str] = field(default_factory=list)
     hashtags: list[str] = field(default_factory=list)
     image_source: str = "hybrid"
+    # Tipo de fondo: "image" (fotos) o "video" (videoclips de stock).
+    media_type: str = "image"
     # Aviso para el usuario cuando NO se pudo llegar a la duracion pedida
     # (por falta de material). Cadena vacia = sin aviso.
     warning: str = ""
@@ -179,6 +181,27 @@ def _scene_durations(scenes: list[Scene], total_duration: float) -> list[float]:
     return [total_duration * (c / total_words) for c in counts]
 
 
+def _fetch_media(
+    scenes: list[Scene],
+    images_dir: Path,
+    media_type: str,
+    image_source: str,
+    progress: ProgressFn,
+) -> list[ImageResult]:
+    """
+    Consigue el fondo de cada escena segun el tipo elegido:
+      - "video" -> videoclips de stock (Pexels/Pixabay)
+      - cualquier otro -> fotos/imagenes (comportamiento de siempre)
+    """
+    if (media_type or "image").lower() == "video":
+        progress("Consiguiendo videoclips...", 60)
+        print("[medios] tipo de fondo: videoclips de stock")
+        return fetch_scene_videos(scenes, images_dir, progress=progress)
+    progress(f"Generando imagenes ({image_source})...", 60)
+    print(f"[medios] tipo de fondo: fotos (fuente: {image_source})")
+    return fetch_scene_images(scenes, images_dir, source=image_source, progress=progress)
+
+
 # ==========================================================================
 #  PASO 1: preparar (guion + voz + imagenes) para revisar
 # ==========================================================================
@@ -192,6 +215,7 @@ def prepare_video(
     rate: str | None = None,
     cta: str | None = None,
     image_source: str | None = None,
+    media_type: str = "image",
     progress: ProgressFn = _noop,
 ) -> PreparedJob:
     cfg = settings
@@ -227,14 +251,10 @@ def prepare_video(
     )
     real_duration = probe_duration(audio.audio_path) or audio.duration or float(duration)
 
-    # 4) Imagenes por escena
-    progress(f"Generando imagenes ({image_source})...", 60)
-    print(f"[imagenes] fuente: {image_source}")
-    images = fetch_scene_images(
-        script.scenes, images_dir, source=image_source, progress=progress
-    )
+    # 4) Medios por escena (fotos o videoclips)
+    images = _fetch_media(script.scenes, images_dir, media_type, image_source, progress)
     for im in images:
-        print(f"[imagenes] {im.source}: {im.query[:60]}")
+        print(f"[medios] {im.source}: {im.query[:60]}")
 
     progress("Listo para revisar imagenes!", 100)
 
@@ -250,6 +270,7 @@ def prepare_video(
         titles=script.titles,
         hashtags=script.hashtags,
         image_source=image_source,
+        media_type=media_type,
         warning=script.warning,
         voice=voice,
         rate=rate,
@@ -270,6 +291,7 @@ def prepare_youtube(
     rate: str | None = None,
     cta: str | None = None,
     image_source: str | None = None,
+    media_type: str = "image",
     progress: ProgressFn = _noop,
 ) -> PreparedJob:
     """
@@ -317,14 +339,10 @@ def prepare_youtube(
     )
     real_duration = probe_duration(audio.audio_path) or audio.duration or float(duration)
 
-    # 4) Imagenes por escena
-    progress(f"Generando imagenes ({image_source})...", 60)
-    print(f"[imagenes] fuente: {image_source}")
-    images = fetch_scene_images(
-        script.scenes, images_dir, source=image_source, progress=progress
-    )
+    # 4) Medios por escena (fotos o videoclips)
+    images = _fetch_media(script.scenes, images_dir, media_type, image_source, progress)
     for im in images:
-        print(f"[imagenes] {im.source}: {im.query[:60]}")
+        print(f"[medios] {im.source}: {im.query[:60]}")
 
     progress("Listo para revisar imagenes!", 100)
 
@@ -340,6 +358,7 @@ def prepare_youtube(
         titles=script.titles,
         hashtags=script.hashtags,
         image_source=image_source,
+        media_type=media_type,
         warning=script.warning,
         voice=voice,
         rate=rate,
@@ -359,6 +378,7 @@ def draft_story(
     rate: str | None = None,
     cta: str | None = None,
     image_source: str | None = None,
+    media_type: str = "image",
     progress: ProgressFn = _noop,
 ) -> PreparedJob:
     """
@@ -404,6 +424,7 @@ def draft_story(
         titles=script.titles,
         hashtags=script.hashtags,
         image_source=image_source,
+        media_type=media_type,
         warning=script.warning,
         voice=voice,
         rate=rate,
@@ -454,10 +475,9 @@ def prepare_from_draft(
     prepared.narration = narration
     prepared.synth_narration = narration
 
-    # 2) Imagenes por escena
-    progress(f"Generando imagenes ({prepared.image_source})...", 60)
-    images = fetch_scene_images(
-        prepared.scenes, images_dir, source=prepared.image_source, progress=progress
+    # 2) Medios por escena (fotos o videoclips, segun lo elegido)
+    images = _fetch_media(
+        prepared.scenes, images_dir, prepared.media_type, prepared.image_source, progress
     )
     prepared.images = images
 
@@ -493,17 +513,33 @@ def regenerate_scene_image(
         scene.keyword = new_keyword.strip()
 
     images_dir = prepared.job_dir / "images"
-    # nombre nuevo en cada intento (evita que el navegador muestre la imagen vieja en cache)
     ts = datetime.now().strftime("%H%M%S")
-    dest = images_dir / f"img_{index:02d}_{ts}_{attempt}.jpg"
 
-    # Memoria de fotos ya mostradas en esta escena, para NO repetir al pulsar
-    # "Otra foto". Incluimos tambien la foto actual para que el primer clic ya
-    # entregue una distinta.
     used = prepared.used_image_urls.setdefault(index, set())
     current = prepared.images[index] if index < len(prepared.images) else None
     if current is not None and getattr(current, "url", ""):
         used.add(current.url)
+
+    # --- Caso VIDEOCLIP: el usuario pidio "otro videoclip" ---
+    if (mode or "").lower() == "video":
+        dest = images_dir / f"vid_{index:02d}_{ts}_{attempt}.mp4"
+        result = fetch_single_video(scene.image_prompt, scene.keyword, dest, used_urls=used)
+        if result is None:
+            used.clear()
+            result = fetch_single_video(scene.image_prompt, scene.keyword, dest, used_urls=used)
+        if result is None:
+            raise ValueError(
+                "No pude encontrar otro videoclip. Prueba con otra descripcion, "
+                "o cambia el fondo a 'Fotos'."
+            )
+        if getattr(result, "url", ""):
+            used.add(result.url)
+        prepared.images[index] = result
+        return result
+
+    # --- Caso FOTO/IMAGEN (comportamiento de siempre) ---
+    # nombre nuevo en cada intento (evita que el navegador muestre la imagen vieja en cache)
+    dest = images_dir / f"img_{index:02d}_{ts}_{attempt}.jpg"
 
     seed = 1000 + index * 100 + attempt + 1
     result = fetch_single_image(
@@ -529,10 +565,13 @@ def regenerate_scene_image(
 
 
 def set_scene_image(prepared: PreparedJob, index: int, image_path: Path, source: str = "subida") -> ImageResult:
-    """Asigna una imagen ya guardada (por ejemplo, subida por el usuario) a una escena."""
+    """Asigna un archivo ya guardado (imagen O video subido) a una escena."""
     if index < 0 or index >= len(prepared.scenes):
         raise ValueError("Escena fuera de rango.")
-    result = ImageResult(path=Path(image_path), source=source, query="imagen subida")
+    is_video = Path(image_path).suffix.lower() in (".mp4", ".mov", ".webm", ".m4v")
+    result = ImageResult(
+        path=Path(image_path), source=source, query="archivo subido", is_video=is_video
+    )
     prepared.images[index] = result
     return result
 
@@ -624,7 +663,9 @@ def assemble_prepared(
 
     # Subtitulos
     progress("Creando los subtitulos sincronizados...", 30)
-    sub_style = SubtitleStyle(name=subtitle_color, position=subtitle_position)
+    sub_style = SubtitleStyle(
+        name=subtitle_color, position=subtitle_position, lead_sec=cfg.subtitle_lead
+    )
     if prepared.audio_words:
         print(f"[subtitulos] {len(prepared.audio_words)} palabras con tiempos exactos")
         subs = build_ass_subtitles(
@@ -678,6 +719,9 @@ def assemble_prepared(
     logo = cfg.assets_dir / "logo.png"
     out_name = f"{prepared.job_dir.name}_{_slugify(prepared.title)}.mp4"
     out_path = cfg.output_dir / out_name
+    # Marca, por escena, si su fondo es un videoclip (para que el ensamblaje
+    # lo trate como video en vez de aplicarle el zoom de fotos).
+    media_is_video = [bool(getattr(im, "is_video", False)) for im in prepared.images]
     result = build_video(
         images=[im.path for im in prepared.images],
         audio_path=prepared.audio_path,
@@ -691,6 +735,7 @@ def assemble_prepared(
         music_path=music_file,
         music_volume=music_volume,
         resolution=(video_w, video_h),
+        media_is_video=media_is_video,
     )
 
     progress("Listo!", 100)

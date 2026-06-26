@@ -57,6 +57,14 @@ class Settings:
     avatar_provider: str = field(default_factory=lambda: os.getenv("AVATAR_PROVIDER", "did").strip())
     did_api_key: str = field(default_factory=lambda: os.getenv("DID_API_KEY", "").strip())
 
+    # --- Subtitulos ---
+    # Cuanto ADELANTAR los subtitulos respecto a la voz, en segundos. Edge TTS
+    # marca el tiempo de cada palabra, pero al reproducir el video los subtitulos
+    # se pueden sentir "atrasados" respecto a lo que se escucha. Adelantarlos un
+    # poco (ej. 0.25 s) hace que aparezcan justo cuando se dice la palabra.
+    # Subelo si aun los notas atrasados; bajalo si se adelantan de mas.
+    subtitle_lead: float = field(default_factory=lambda: float(os.getenv("SUBTITLE_LEAD", "0.25") or 0.25))
+
     # --- Video ---
     video_duration: int = field(default_factory=lambda: int(os.getenv("VIDEO_DURATION", "45") or 45))
     script_style: str = field(default_factory=lambda: os.getenv("SCRIPT_STYLE", "breaking").strip())

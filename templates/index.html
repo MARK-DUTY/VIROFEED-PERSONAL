@@ -78,6 +78,7 @@
             <option value="90" {% if defaults.duration==90 %}selected{% endif %}>90 segundos (1.5 min)</option>
             <option value="120" {% if defaults.duration==120 %}selected{% endif %}>2 minutos</option>
             <option value="180" {% if defaults.duration==180 %}selected{% endif %}>3 minutos</option>
+            <option value="240" {% if defaults.duration==240 %}selected{% endif %}>4 minutos</option>
             <option value="300" {% if defaults.duration==300 %}selected{% endif %}>5 minutos</option>
           </select>
         </label>
@@ -145,6 +146,23 @@
           </select>
         </label>
       </div>
+
+      <div class="row">
+        <label class="field">
+          <span>Tipo de fondo del video</span>
+          <select id="media_type">
+            <option value="image" selected>🖼️ Fotos (imágenes fijas con zoom)</option>
+            <option value="video">🎞️ Videoclips (fondos con movimiento)</option>
+          </select>
+        </label>
+      </div>
+
+      <p class="hint hidden" id="video-bg-hint">
+        🎞️ <strong>Videoclips:</strong> en vez de fotos fijas, el programa usa
+        <strong>clips de video reales y gratis</strong> (Pexels/Pixabay) que concuerdan
+        con cada escena. Necesitas tu clave de Pexels o Pixabay en el <code>.env</code>.
+        Si una escena no encuentra clip, usa una foto para no romper el video.
+      </p>
 
       <div class="row">
         <label class="field">

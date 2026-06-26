@@ -125,6 +125,7 @@ def _review_payload(job_id: str) -> dict:
             "keyword": scene.keyword,
             "image_file": Path(img.path).name,
             "source": img.source,
+            "is_video": bool(getattr(img, "is_video", False)),
         })
     return {
         "job_id": job_id,
@@ -135,6 +136,7 @@ def _review_payload(job_id: str) -> dict:
         "duration": round(prepared.real_duration, 1),
         "warning": getattr(prepared, "warning", "") or "",
         "use_avatar": bool(job["options"].get("use_avatar", False)),
+        "media_type": job["options"].get("media_type", "image"),
         "voice": prepared.voice,
         "scenes": scenes,
     }
@@ -185,6 +187,7 @@ def api_prepare():
         "rate": data.get("rate") if data.get("rate") is not None else fresh.tts_rate,
         "cta": data.get("cta") or fresh.call_to_action,
         "image_source": data.get("image_source") or fresh.image_source,
+        "media_type": (data.get("media_type") or "image").lower(),
         "subtitle_color": data.get("subtitle_color") or "amarillo",
         "subtitle_position": data.get("subtitle_position") or "center",
         "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
@@ -217,6 +220,7 @@ def _run_prepare(job_id: str, url, options: dict) -> None:
             rate=options["rate"],
             cta=options["cta"],
             image_source=options["image_source"],
+            media_type=options.get("media_type", "image"),
             progress=progress,
         )
         JOBS[job_id]["prepared"] = prepared
@@ -255,6 +259,7 @@ def api_prepare_youtube():
         "rate": data.get("rate") if data.get("rate") is not None else fresh.tts_rate,
         "cta": data.get("cta") or fresh.call_to_action,
         "image_source": data.get("image_source") or fresh.image_source,
+        "media_type": (data.get("media_type") or "image").lower(),
         "subtitle_color": data.get("subtitle_color") or "amarillo",
         "subtitle_position": data.get("subtitle_position") or "center",
         "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
@@ -287,6 +292,7 @@ def _run_prepare_youtube(job_id: str, url, options: dict) -> None:
             rate=options["rate"],
             cta=options["cta"],
             image_source=options["image_source"],
+            media_type=options.get("media_type", "image"),
             progress=progress,
         )
         JOBS[job_id]["prepared"] = prepared
@@ -324,6 +330,7 @@ def api_draft_story():
         "rate": data.get("rate") if data.get("rate") is not None else fresh.tts_rate,
         "cta": data.get("cta") or fresh.call_to_action,
         "image_source": data.get("image_source") or fresh.image_source,
+        "media_type": (data.get("media_type") or "image").lower(),
         "subtitle_color": data.get("subtitle_color") or "amarillo",
         "subtitle_position": data.get("subtitle_position") or "center",
         "use_avatar": bool(data.get("use_avatar", fresh.avatar_enabled)),
@@ -355,6 +362,7 @@ def _run_draft(job_id: str, story: str, options: dict) -> None:
             rate=options["rate"],
             cta=options["cta"],
             image_source=options["image_source"],
+            media_type=options.get("media_type", "image"),
             progress=progress,
         )
         JOBS[job_id]["prepared"] = prepared
@@ -495,6 +503,7 @@ def api_regenerate_image():
             "index": index,
             "image_file": Path(result.path).name,
             "source": result.source,
+            "is_video": bool(getattr(result, "is_video", False)),
         })
     except Exception as exc:  # noqa: BLE001
         traceback.print_exc()
@@ -518,13 +527,21 @@ def api_upload_image():
         prepared = job["prepared"]
         file = request.files["image"]
         ext = Path(secure_filename(file.filename or "img.jpg")).suffix.lower() or ".jpg"
-        if ext not in (".jpg", ".jpeg", ".png", ".webp"):
-            return jsonify({"error": "Formato no valido. Usa JPG, PNG o WEBP."}), 400
-        dest = prepared.job_dir / "images" / f"img_{index:02d}_subida{ext}"
+        image_exts = (".jpg", ".jpeg", ".png", ".webp")
+        video_exts = (".mp4", ".mov", ".webm", ".m4v")
+        if ext not in image_exts + video_exts:
+            return jsonify({"error": "Formato no valido. Usa JPG, PNG, WEBP (foto) o MP4, MOV, WEBM (video)."}), 400
+        kind = "video" if ext in video_exts else "img"
+        dest = prepared.job_dir / "images" / f"{kind}_{index:02d}_subida{ext}"
         file.save(str(dest))
-        set_scene_image(prepared, index, dest, source="subida")
+        result = set_scene_image(prepared, index, dest, source="subida")
         job["review"] = _review_payload(job_id)
-        return jsonify({"index": index, "image_file": dest.name, "source": "subida"})
+        return jsonify({
+            "index": index,
+            "image_file": dest.name,
+            "source": "subida",
+            "is_video": bool(getattr(result, "is_video", False)),
+        })
     except Exception as exc:  # noqa: BLE001
         traceback.print_exc()
         return jsonify({"error": str(exc)}), 400
