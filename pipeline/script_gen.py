@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 
 import requests
@@ -352,8 +353,36 @@ def _extract_json(content: str) -> dict:
         raise
 
 
+def _retry_after_seconds(resp, default: float = 8.0) -> float:
+    """
+    Cuanto esperar antes de reintentar tras un 429 de Groq.
+    Groq suele mandar el tiempo en la cabecera 'retry-after' o en el mensaje
+    del cuerpo ("try again in 12.3s"). Lo limitamos a un maximo razonable.
+    """
+    ra = resp.headers.get("retry-after") or resp.headers.get("Retry-After")
+    if ra:
+        try:
+            return max(1.0, min(45.0, float(ra)))
+        except ValueError:
+            pass
+    try:
+        msg = resp.json().get("error", {}).get("message", "")
+        m = re.search(r"in ([\d.]+)s", msg)
+        if m:
+            return max(1.0, min(45.0, float(m.group(1)) + 0.5))
+    except Exception:
+        pass
+    return default
+
+
 def _call_groq(messages: list[dict], timeout: int = 60, max_tokens: int = 2500) -> dict:
-    """Envia los mensajes a Groq y devuelve el JSON ya parseado (dict)."""
+    """Envia los mensajes a Groq y devuelve el JSON ya parseado (dict).
+
+    Si Groq responde 429 (limite gratis por minuto), ESPERAMOS lo que Groq
+    indique y reintentamos automaticamente unas cuantas veces, para que el
+    usuario no tenga que volver a empezar. Si aun asi falla (suele ser el limite
+    DIARIO), mostramos un mensaje claro.
+    """
     if not settings.groq_api_key or settings.groq_api_key.startswith("PEGA_AQUI"):
         raise ValueError(
             "Falta la clave de Groq (GROQ_API_KEY) en tu archivo .env. "
@@ -372,15 +401,31 @@ def _call_groq(messages: list[dict], timeout: int = 60, max_tokens: int = 2500) 
         "Content-Type": "application/json",
     }
 
-    try:
-        resp = requests.post(GROQ_URL, json=payload, headers=headers, timeout=timeout)
-    except requests.RequestException as exc:
-        raise ValueError(f"No pude conectar con Groq. Revisa tu internet. Detalle: {exc}") from exc
+    max_attempts = 4
+    resp = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = requests.post(GROQ_URL, json=payload, headers=headers, timeout=timeout)
+        except requests.RequestException as exc:
+            raise ValueError(f"No pude conectar con Groq. Revisa tu internet. Detalle: {exc}") from exc
+
+        if resp.status_code == 429 and attempt < max_attempts:
+            wait = _retry_after_seconds(resp)
+            print(f"[guion] Groq ocupado (429). Espero {wait:.0f}s y reintento "
+                  f"({attempt}/{max_attempts - 1})...")
+            time.sleep(wait)
+            continue
+        break
 
     if resp.status_code == 401:
         raise ValueError("Groq rechazo la clave (401). Revisa tu GROQ_API_KEY en .env")
     if resp.status_code == 429:
-        raise ValueError("Groq dice que excediste el limite gratis por ahora (429). Espera unos minutos.")
+        raise ValueError(
+            "Groq sigue ocupado por el limite del plan gratis (429). Reintente solo "
+            "varias veces sin exito. Espera unos minutos y vuelve a intentar. Si has "
+            "generado muchos videos hoy, puede ser el limite DIARIO: intenta mas tarde "
+            "o crea otra clave gratis en https://console.groq.com y ponla en tu .env"
+        )
     if resp.status_code >= 400:
         raise ValueError(f"Groq devolvio un error {resp.status_code}: {resp.text[:300]}")
 
