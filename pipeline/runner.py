@@ -181,6 +181,17 @@ def _scene_durations(scenes: list[Scene], total_duration: float) -> list[float]:
     return [total_duration * (c / total_words) for c in counts]
 
 
+def planned_scene_durations(prepared: "PreparedJob") -> list[float]:
+    """
+    Duracion (en segundos) que tendra cada escena en el video, segun el audio
+    actual. Se usa para MOSTRARLE al usuario cuanto durara cada imagen/video en
+    la pantalla de revision. Si aun no hay audio, devuelve ceros.
+    """
+    if not prepared.scenes or prepared.real_duration <= 0:
+        return [0.0] * len(prepared.scenes)
+    return _scene_durations(prepared.scenes, prepared.real_duration)
+
+
 def _fetch_media(
     scenes: list[Scene],
     images_dir: Path,
@@ -191,11 +202,15 @@ def _fetch_media(
     """
     Consigue el fondo de cada escena segun el tipo elegido:
       - "video" -> videoclips de stock (Pexels/Pixabay)
-      - cualquier otro -> fotos/imagenes (comportamiento de siempre)
+      - "mixed" -> videoclip por escena y, si no hay, una foto (lo hace
+                   fetch_scene_videos, que cae a foto cuando no encuentra clip)
+      - cualquier otro ("image") -> fotos/imagenes (comportamiento de siempre)
     """
-    if (media_type or "image").lower() == "video":
-        progress("Consiguiendo videoclips...", 60)
-        print("[medios] tipo de fondo: videoclips de stock")
+    mt = (media_type or "image").lower()
+    if mt in ("video", "mixed"):
+        label = "videoclips" if mt == "video" else "mixto (video + foto)"
+        progress(f"Consiguiendo {label}...", 60)
+        print(f"[medios] tipo de fondo: {label}")
         return fetch_scene_videos(scenes, images_dir, progress=progress)
     progress(f"Generando imagenes ({image_source})...", 60)
     print(f"[medios] tipo de fondo: fotos (fuente: {image_source})")

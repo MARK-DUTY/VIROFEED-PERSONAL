@@ -171,6 +171,18 @@ footer { text-align: center; color: var(--muted); margin-top: 30px; font-size: 0
   letter-spacing: .5px;
 }
 
+.scene-dur {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0,0,0,0.65);
+  color: #ffe066;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 99px;
+}
+
 .scene-loading {
   position: absolute;
   top: 8px;

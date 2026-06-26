@@ -86,19 +86,48 @@
 
       <div class="row">
         <label class="field">
-          <span>Número de imágenes (fotos del video)</span>
-          <select id="n_images">
-            <option value="auto" selected>🔄 Automático (según duración, mínimo 8)</option>
-            <option value="8">8 imágenes</option>
-            <option value="10">10 imágenes</option>
-            <option value="12">12 imágenes</option>
-            <option value="15">15 imágenes</option>
-            <option value="20">20 imágenes</option>
-            <option value="25">25 imágenes</option>
-            <option value="30">30 imágenes</option>
+          <span>Imágenes / videos del video</span>
+          <select id="media_plan">
+            <optgroup label="🖼️ Solo imágenes (fotos)">
+              <option value="image:auto" selected>🔄 Automático imágenes (según duración, mínimo 8)</option>
+              <option value="image:8">8 imágenes</option>
+              <option value="image:10">10 imágenes</option>
+              <option value="image:12">12 imágenes</option>
+              <option value="image:15">15 imágenes</option>
+              <option value="image:20">20 imágenes</option>
+              <option value="image:25">25 imágenes</option>
+              <option value="image:30">30 imágenes</option>
+            </optgroup>
+            <optgroup label="🎞️ Solo videos (clips reales)">
+              <option value="video:auto">🔄 Automático videos (según duración, mínimo 8)</option>
+              <option value="video:8">8 videos</option>
+              <option value="video:10">10 videos</option>
+              <option value="video:12">12 videos</option>
+              <option value="video:15">15 videos</option>
+              <option value="video:20">20 videos</option>
+              <option value="video:25">25 videos</option>
+              <option value="video:30">30 videos</option>
+            </optgroup>
+            <optgroup label="🎬 Mixto (video y, si no hay, imagen)">
+              <option value="mixed:auto">🔄 Automático mixto (según duración, mínimo 8)</option>
+              <option value="mixed:8">8 escenas</option>
+              <option value="mixed:10">10 escenas</option>
+              <option value="mixed:12">12 escenas</option>
+              <option value="mixed:15">15 escenas</option>
+              <option value="mixed:20">20 escenas</option>
+              <option value="mixed:25">25 escenas</option>
+              <option value="mixed:30">30 escenas</option>
+            </optgroup>
           </select>
         </label>
       </div>
+
+      <p class="hint" id="media-plan-hint">
+        🎞️ <strong>Videos / Mixto:</strong> el programa usa <strong>clips de video reales y gratis</strong>
+        (Pexels/Pixabay) que concuerdan con cada escena. Cada clip se ajusta solo al tiempo de la escena
+        (~8 seg): si el clip dura más, se recorta; si dura menos, se repite. Necesitas tu clave de Pexels o
+        Pixabay en el <code>.env</code>. En <strong>Mixto</strong>, si una escena no encuentra video, pone una foto.
+      </p>
 
       <p class="hint hidden" id="long-video-warning">
         ⏳ <strong>Ojo:</strong> los videos largos (2 minutos o más) pueden tardar
@@ -146,23 +175,6 @@
           </select>
         </label>
       </div>
-
-      <div class="row">
-        <label class="field">
-          <span>Tipo de fondo del video</span>
-          <select id="media_type">
-            <option value="image" selected>🖼️ Fotos (imágenes fijas con zoom)</option>
-            <option value="video">🎞️ Videoclips (fondos con movimiento)</option>
-          </select>
-        </label>
-      </div>
-
-      <p class="hint hidden" id="video-bg-hint">
-        🎞️ <strong>Videoclips:</strong> en vez de fotos fijas, el programa usa
-        <strong>clips de video reales y gratis</strong> (Pexels/Pixabay) que concuerdan
-        con cada escena. Necesitas tu clave de Pexels o Pixabay en el <code>.env</code>.
-        Si una escena no encuentra clip, usa una foto para no romper el video.
-      </p>
 
       <div class="row">
         <label class="field">
@@ -221,7 +233,7 @@
 
     <section class="card hidden" id="review-card">
       <h2>🖼️ Revisa y aprueba antes de armar el video</h2>
-      <p class="hint">Para cada escena puedes: ✏️ editar el <strong>diálogo</strong>, 🎨 <strong>crear la imagen con IA usando tu texto</strong> (lo que escribas en "Descripción de la imagen"), 🔁 buscar otra <strong>foto real</strong>, ⬆️ subir una imagen desde tu PC, o 🗑️ eliminar la escena. Cuando todo te guste, genera el video.</p>
+      <p class="hint">Para cada escena puedes: ✏️ editar el <strong>diálogo</strong>, 🎨 <strong>crear la imagen con IA usando tu texto</strong>, 🖼️ buscar otra <strong>foto real</strong>, 🎞️ poner un <strong>video real</strong>, ⬆️ subir tu propia imagen o video desde tu PC, o 🗑️ eliminar la escena. Cada escena muestra cuántos <strong>segundos</strong> durará. Cuando todo te guste, genera el video.</p>
       <p class="hint">💡 <strong>¿Quieres una imagen exacta de lo que pides?</strong> Escribe tu descripción en inglés y pulsa <strong>"🎨 Crear con mi texto (IA)"</strong>. La IA la inventa desde cero (gratis). El botón "🔁 Otra foto real" busca fotos ya existentes, que no siempre coinciden con todo.</p>
       <p class="hint" id="dialogue-note">💡 Si editas algún diálogo o eliminas escenas, la voz y los subtítulos se regeneran solos al generar el video.</p>
       <div id="review-warning" class="warn-banner hidden"></div>

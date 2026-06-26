@@ -51,27 +51,23 @@ function setProgress(pct, msg) {
 // Opciones compartidas (duracion, voz, subtitulos, etc.) para ambos modos
 function sharedOptions() {
   imageSourceChosen = $("image_source").value;
+  // El menu unico "media_plan" trae tipo + cantidad junto, ej: "video:12".
+  // Lo separamos en media_type ("image"|"video"|"mixed") y n_images ("auto"|numero).
+  const planRaw = $("media_plan") ? $("media_plan").value : "image:auto";
+  const [planType, planCount] = planRaw.split(":");
   return {
     duration: $("duration").value,
-    n_images: $("n_images") ? $("n_images").value : "auto",
+    n_images: planCount || "auto",
+    media_type: planType || "image",
     aspect: $("aspect") ? $("aspect").value : "9:16",
     style: $("style").value,
     voice: $("voice").value,
     subtitle_color: $("subtitle_color").value,
     subtitle_position: $("subtitle_position").value,
     image_source: imageSourceChosen,
-    media_type: $("media_type") ? $("media_type").value : "image",
     cta: $("cta").value,
     use_avatar: $("use_avatar").checked,
   };
-}
-
-// Muestra el aviso de videoclips solo cuando el usuario elige ese tipo de fondo.
-function refreshMediaTypeHint() {
-  const sel = $("media_type");
-  const hint = $("video-bg-hint");
-  if (!sel || !hint) return;
-  hint.classList.toggle("hidden", sel.value !== "video");
 }
 
 // Muestra un aviso cuando el usuario elige un video largo (2 min o mas),
@@ -338,37 +334,33 @@ function renderReview(review) {
       ? `<video class="scene-img" id="img-${scene.index}" src="${imgUrl(scene.image_file)}" muted loop autoplay playsinline></video>`
       : `<img class="scene-img" id="img-${scene.index}" src="${imgUrl(scene.image_file)}" alt="escena ${scene.index + 1}">`;
 
-    const promptLabel = isVid
-      ? "🎞️ Descripción del clip (en inglés, para buscar otro videoclip)"
-      : "🖼️ Descripción de la imagen (en inglés)";
+    // Cuanto durara esta escena en el video (para que el usuario lo sepa).
+    const durTxt = scene.duration ? `⏱️ ~${scene.duration}s` : "";
 
-    // Botones: en modo video ofrecemos "Otro videoclip"; en foto, IA + otra foto.
-    const mediaButtons = isVid
-      ? `<button class="btn-mini" data-act="video" data-i="${scene.index}">🔁 Otro videoclip</button>`
-      : `<button class="btn-mini btn-ai" data-act="ai" data-i="${scene.index}">🎨 Crear con mi texto (IA)</button>
-         <button class="btn-mini" data-act="stock" data-i="${scene.index}">🔁 Otra foto real</button>`;
-
-    const fileAccept = isVid ? "video/*,image/*" : "image/*";
-
+    // Todas las escenas tienen las MISMAS opciones, asi puedes cambiar
+    // libremente cualquier escena entre foto y video.
     card.innerHTML = `
       <div class="scene-img-wrap">
         ${mediaEl}
         <span class="scene-badge" id="badge-${scene.index}">${scene.source}</span>
+        <span class="scene-dur" id="dur-${scene.index}">${durTxt}</span>
         <div class="scene-loading hidden" id="loading-${scene.index}">Generando...</div>
       </div>
       <label class="scene-label">🎬 Escena ${scene.index + 1} · Diálogo (lo que se narra)</label>
       <textarea class="scene-dialogue" id="dialogue-${scene.index}" rows="3"
         title="Edita lo que se dice en esta escena">${escapeHtml(scene.text)}</textarea>
       <span class="scene-saved hidden" id="saved-${scene.index}">✔ Guardado</span>
-      <label class="scene-label">${promptLabel}</label>
+      <label class="scene-label">🔎 Descripción (en inglés) · para imagen IA o para buscar foto/video</label>
       <textarea class="scene-prompt" id="prompt-${scene.index}" rows="2" spellcheck="false"
         title="Describe lo que quieres (en inglés).">${escapeHtml(scene.image_prompt)}</textarea>
       <div class="scene-actions">
-        ${mediaButtons}
-        <button class="btn-mini" data-act="upload" data-i="${scene.index}">⬆️ Subir</button>
+        <button class="btn-mini btn-ai" data-act="ai" data-i="${scene.index}">🎨 Imagen con IA</button>
+        <button class="btn-mini" data-act="stock" data-i="${scene.index}">🖼️ Otra foto real</button>
+        <button class="btn-mini" data-act="video" data-i="${scene.index}">🎞️ Otro video real</button>
+        <button class="btn-mini" data-act="upload" data-i="${scene.index}">⬆️ Subir foto/video</button>
         <button class="btn-mini btn-danger" data-act="delete" data-i="${scene.index}">🗑️ Eliminar</button>
       </div>
-      <input type="file" accept="${fileAccept}" class="hidden" id="file-${scene.index}">
+      <input type="file" accept="image/*,video/*" class="hidden" id="file-${scene.index}">
     `;
     grid.appendChild(card);
   });
@@ -674,10 +666,4 @@ setupMusicControls();
 if ($("duration")) {
   $("duration").addEventListener("change", refreshLongVideoWarning);
   refreshLongVideoWarning();
-}
-
-// Aviso de videoclips: mostrarlo cuando el usuario elige "Videoclips" de fondo
-if ($("media_type")) {
-  $("media_type").addEventListener("change", refreshMediaTypeHint);
-  refreshMediaTypeHint();
 }

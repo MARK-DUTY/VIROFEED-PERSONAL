@@ -35,9 +35,10 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Cuantas palabras caben aproximadamente segun la duracion (locucion ~2.6 pal/seg)
 _WORDS_PER_SECOND = 2.6
 
-# Cada cuantos SEGUNDOS queremos que cambie la foto. Bajalo para MAS fotos
-# (mas dinamico) o subelo para menos. ~15 s es un buen ritmo viral.
-SECONDS_PER_IMAGE = 15
+# Cada cuantos SEGUNDOS queremos que cambie la imagen/video. Bajalo para MAS
+# escenas (mas dinamico) o subelo para menos. ~8 s es un buen ritmo viral y
+# evita que una imagen se quede pegada demasiado tiempo.
+SECONDS_PER_IMAGE = 8
 
 # Cuantas veces, como maximo, le pedimos a la IA que ALARGUE el guion si quedo
 # corto. Cada intento es gratis y rapido (Groq), pero no insistimos infinito.
@@ -56,7 +57,7 @@ def _scene_count_for(duration: int) -> int:
     SECONDS_PER_IMAGE segundos). Asi un video largo tiene MAS fotos y la gente
     no se aburre viendo la misma imagen mucho tiempo.
 
-    Ej (con 15 s/foto): 45s->3, 60s->4, 120s->8, 180s->12, 300s->20.
+    Ej (con 8 s/foto): 45s->6, 60s->8, 120s->15, 180s->23, 300s->38.
     """
     return max(3, min(40, round(duration / SECONDS_PER_IMAGE)))
 

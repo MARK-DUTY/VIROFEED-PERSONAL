@@ -54,6 +54,7 @@ from pipeline.runner import (
     assemble_prepared,
     delete_scene,
     draft_story,
+    planned_scene_durations,
     prepare_from_draft,
     prepare_video,
     prepare_youtube,
@@ -116,8 +117,10 @@ def index():
 def _review_payload(job_id: str) -> dict:
     job = JOBS[job_id]
     prepared = job["prepared"]
+    durations = planned_scene_durations(prepared)
     scenes = []
     for i, (scene, img) in enumerate(zip(prepared.scenes, prepared.images)):
+        dur = round(durations[i], 1) if i < len(durations) else 0.0
         scenes.append({
             "index": i,
             "text": scene.text,
@@ -126,6 +129,7 @@ def _review_payload(job_id: str) -> dict:
             "image_file": Path(img.path).name,
             "source": img.source,
             "is_video": bool(getattr(img, "is_video", False)),
+            "duration": dur,
         })
     return {
         "job_id": job_id,
