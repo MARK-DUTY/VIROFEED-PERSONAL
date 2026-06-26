@@ -735,7 +735,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 18 (lector de YouTube resistente a bloqueos)")
+    print("  VERSION DEL CODIGO: 20 (menu de medios 3 opciones + videos + YouTube a prueba de fallos)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)
