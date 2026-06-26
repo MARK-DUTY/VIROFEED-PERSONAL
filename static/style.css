@@ -87,6 +87,13 @@ input:focus, select:focus { border-color: var(--accent); }
 .alert ul { margin: 8px 0 0 20px; }
 .alert code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 5px; }
 
+/* Aviso "necesito mas informacion" en las pantallas de revision/borrador */
+.warn-banner {
+  background: #3a2a10; border: 1px solid #7a5a1a; color: #ffd591;
+  padding: 14px 16px; border-radius: 12px; margin: 6px 0 16px;
+  font-size: 0.95rem; line-height: 1.4; font-weight: 600;
+}
+
 .progress-bar { background: var(--card-2); border-radius: 99px; height: 14px; overflow: hidden; margin: 16px 0 12px; }
 .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .4s; }
 #progress-msg { font-weight: 600; }

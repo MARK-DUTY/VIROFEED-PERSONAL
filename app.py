@@ -133,6 +133,7 @@ def _review_payload(job_id: str) -> dict:
         "titles": prepared.titles,
         "hashtags": prepared.hashtags,
         "duration": round(prepared.real_duration, 1),
+        "warning": getattr(prepared, "warning", "") or "",
         "use_avatar": bool(job["options"].get("use_avatar", False)),
         "voice": prepared.voice,
         "scenes": scenes,
@@ -155,6 +156,7 @@ def _draft_payload(job_id: str) -> dict:
         "title": prepared.title,
         "titles": prepared.titles,
         "hashtags": prepared.hashtags,
+        "warning": getattr(prepared, "warning", "") or "",
         "scenes": scenes,
     }
 

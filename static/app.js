@@ -231,6 +231,7 @@ function pollStatus() {
 // ----------------------------------------------------------------------
 function renderDraft(draft) {
   generateBtn.disabled = false;
+  showWarning("draft-warning", draft.warning);
   const grid = $("draft-grid");
   grid.innerHTML = "";
 
@@ -309,6 +310,7 @@ function imgUrl(file) {
 
 function renderReview(review) {
   generateBtn.disabled = false;
+  showWarning("review-warning", review.warning);
   const grid = $("scenes-grid");
   grid.innerHTML = "";
 
@@ -586,6 +588,20 @@ function escapeHtml(s) {
   return (s || "").replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
   ));
+}
+
+// Muestra (u oculta) un aviso amarillo. Se usa para "necesito mas informacion"
+// cuando el guion no alcanzo la duracion pedida por falta de material.
+function showWarning(elId, msg) {
+  const el = $(elId);
+  if (!el) return;
+  if (msg && msg.trim()) {
+    el.textContent = msg;
+    el.classList.remove("hidden");
+  } else {
+    el.textContent = "";
+    el.classList.add("hidden");
+  }
 }
 
 // ----------------------------------------------------------------------

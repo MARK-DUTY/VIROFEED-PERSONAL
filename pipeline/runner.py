@@ -142,6 +142,9 @@ class PreparedJob:
     titles: list[str] = field(default_factory=list)
     hashtags: list[str] = field(default_factory=list)
     image_source: str = "hybrid"
+    # Aviso para el usuario cuando NO se pudo llegar a la duracion pedida
+    # (por falta de material). Cadena vacia = sin aviso.
+    warning: str = ""
     # Datos para poder REGENERAR la voz si el usuario edita los dialogos:
     voice: str = "es-MX-JorgeNeural"
     rate: str = "+0%"
@@ -246,6 +249,7 @@ def prepare_video(
         titles=script.titles,
         hashtags=script.hashtags,
         image_source=image_source,
+        warning=script.warning,
         voice=voice,
         rate=rate,
         synth_narration=script.narration,
@@ -334,6 +338,7 @@ def prepare_youtube(
         titles=script.titles,
         hashtags=script.hashtags,
         image_source=image_source,
+        warning=script.warning,
         voice=voice,
         rate=rate,
         synth_narration=script.narration,
@@ -397,6 +402,7 @@ def draft_story(
         titles=script.titles,
         hashtags=script.hashtags,
         image_source=image_source,
+        warning=script.warning,
         voice=voice,
         rate=rate,
         synth_narration="",

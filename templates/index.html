@@ -187,6 +187,7 @@
       <h2>📝 Revisa el guion y los prompts</h2>
       <p class="hint">La IA dividio tu historia en escenas. Para cada una puedes editar el <strong>diálogo</strong> (lo que se narra) y el <strong>prompt de la imagen</strong>. Cuando te gusten, genera la voz y las imágenes.</p>
       <p class="hint">💡 ¿No te convence? Puedes <strong>reescribir tu historia</strong> y volver a generar el guion completo.</p>
+      <div id="draft-warning" class="warn-banner hidden"></div>
       <div id="draft-grid" class="draft-grid"></div>
       <button id="generate-draft-btn" class="btn-primary">🎨 Generar voz e imágenes</button>
       <button id="redraft-btn" class="btn-secondary">✍️ Reescribir mi historia</button>
@@ -197,6 +198,7 @@
       <p class="hint">Para cada escena puedes: ✏️ editar el <strong>diálogo</strong>, 🎨 <strong>crear la imagen con IA usando tu texto</strong> (lo que escribas en "Descripción de la imagen"), 🔁 buscar otra <strong>foto real</strong>, ⬆️ subir una imagen desde tu PC, o 🗑️ eliminar la escena. Cuando todo te guste, genera el video.</p>
       <p class="hint">💡 <strong>¿Quieres una imagen exacta de lo que pides?</strong> Escribe tu descripción en inglés y pulsa <strong>"🎨 Crear con mi texto (IA)"</strong>. La IA la inventa desde cero (gratis). El botón "🔁 Otra foto real" busca fotos ya existentes, que no siempre coinciden con todo.</p>
       <p class="hint" id="dialogue-note">💡 Si editas algún diálogo o eliminas escenas, la voz y los subtítulos se regeneran solos al generar el video.</p>
+      <div id="review-warning" class="warn-banner hidden"></div>
       <div id="scenes-grid" class="scenes-grid"></div>
 
       <!-- Voz y avatar: se pueden cambiar aqui mismo, antes de armar el video -->
