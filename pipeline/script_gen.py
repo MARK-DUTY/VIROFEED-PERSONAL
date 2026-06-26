@@ -61,6 +61,28 @@ def _scene_count_for(duration: int) -> int:
     return max(3, min(40, round(duration / SECONDS_PER_IMAGE)))
 
 
+def _resolve_n_images(n_images, duration: int) -> int:
+    """
+    Decide cuantas fotos/escenas usar a partir de lo que eligio el usuario.
+
+    - "auto" / vacio / None -> automatico segun la duracion, pero NUNCA menos de 8.
+    - un numero -> se respeta, limitado entre 8 (minimo) y 40 (maximo).
+
+    Asi el usuario puede decidir cuantas imagenes quiere en CUALQUIER modo
+    (noticia, YouTube o historia), sin importar la duracion del video.
+    """
+    auto = max(8, _scene_count_for(duration))
+    if n_images is None:
+        return auto
+    texto = str(n_images).strip().lower()
+    if texto in ("", "auto", "automatico", "automático", "0"):
+        return auto
+    try:
+        return max(8, min(40, int(float(texto))))
+    except ValueError:
+        return auto
+
+
 def _tolerance_words(duration: int) -> int:
     """
     Margen permitido (en palabras) para considerar que el guion 'da el ancho'.
@@ -108,12 +130,10 @@ class VideoScript:
         return [s.keyword for s in self.scenes if s.keyword]
 
 
-def _build_prompt(article: Article, duration: int, style: str, cta: str) -> list[dict]:
+def _build_prompt(article: Article, duration: int, style: str, cta: str, n_scenes: int) -> list[dict]:
     target_words = int(duration * _WORDS_PER_SECOND)
     min_words = max(1, target_words - _tolerance_words(duration))
     style_desc = _STYLE_DESC.get(style, _STYLE_DESC["breaking"])
-    # ~1 escena (foto) cada SECONDS_PER_IMAGE segundos.
-    n_scenes = _scene_count_for(duration)
     # Para videos largos le damos mas texto de la noticia a la IA (mas material).
     src_chars = min(16000, max(6000, target_words * 25))
 
@@ -522,20 +542,24 @@ def generate_script(
     duration: int | None = None,
     style: str | None = None,
     cta: str | None = None,
+    n_images=None,
     timeout: int = 60,
 ) -> VideoScript:
-    """Llama a Groq y devuelve un VideoScript con escenas listo para usar (desde NOTICIA)."""
+    """Llama a Groq y devuelve un VideoScript con escenas listo para usar (desde NOTICIA).
+
+    n_images: cuantas fotos quiere el usuario ("auto" o un numero entre 8 y 40).
+    """
     duration = duration or settings.video_duration
     style = style or settings.script_style
     cta = cta or settings.call_to_action
 
     style_desc = _STYLE_DESC.get(style, _STYLE_DESC["breaking"])
-    n_scenes = _scene_count_for(duration)
+    n_scenes = _resolve_n_images(n_images, duration)
     target_words = int(duration * _WORDS_PER_SECOND)
     src_chars = min(16000, max(6000, target_words * 25))
     max_tokens = _tokens_for(duration)
 
-    messages = _build_prompt(article, duration, style, cta)
+    messages = _build_prompt(article, duration, style, cta, n_scenes)
     script = _parse_script(_call_groq(messages, timeout=timeout, max_tokens=max_tokens))
 
     script = _fit_length_and_scenes(
@@ -563,13 +587,14 @@ def generate_script(
 def generate_script_from_story(
     story: str,
     duration: int | None = None,
-    n_images: int = 8,
+    n_images=8,
     cta: str | None = None,
     timeout: int = 60,
 ) -> VideoScript:
     """
     Llama a Groq y devuelve un VideoScript a partir de una HISTORIA escrita
-    por el usuario (Modo Historia). Genera como minimo 8 escenas/imagenes.
+    por el usuario (Modo Historia). El usuario elige cuantas fotos quiere
+    ("auto" o un numero entre 8 y 40).
     """
     story = (story or "").strip()
     if len(story) < 30:
@@ -580,16 +605,15 @@ def generate_script_from_story(
 
     duration = duration or settings.video_duration
     cta = cta or settings.call_to_action
-    n_images = max(8, int(n_images or 8))
 
-    # En el modo historia el usuario elige el numero de imagenes; ademas
-    # respetamos el ritmo de ~1 foto cada SECONDS_PER_IMAGE para videos largos.
-    n_scenes = max(n_images, _scene_count_for(duration))
+    # El usuario decide el numero de imagenes (minimo 8); "auto" lo calcula
+    # segun la duracion. Es el mismo criterio que en el modo noticia.
+    n_scenes = _resolve_n_images(n_images, duration)
     style_desc = "estilo narrativo atractivo y con buen ritmo"
     target_words = int(duration * _WORDS_PER_SECOND)
     max_tokens = _tokens_for(duration)
 
-    messages = _build_story_prompt(story, duration, n_images, cta)
+    messages = _build_story_prompt(story, duration, n_scenes, cta)
     script = _parse_script(_call_groq(messages, timeout=timeout, max_tokens=max_tokens))
 
     script = _fit_length_and_scenes(

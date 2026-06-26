@@ -180,6 +180,7 @@ def api_prepare():
     options = {
         "duration": int(data.get("duration") or fresh.video_duration),
         "style": data.get("style") or fresh.script_style,
+        "n_images": data.get("n_images") or "auto",
         "voice": data.get("voice") or fresh.tts_voice,
         "rate": data.get("rate") if data.get("rate") is not None else fresh.tts_rate,
         "cta": data.get("cta") or fresh.call_to_action,
@@ -211,6 +212,7 @@ def _run_prepare(job_id: str, url, options: dict) -> None:
             url,
             duration=options["duration"],
             style=options["style"],
+            n_images=options.get("n_images", "auto"),
             voice=options["voice"],
             rate=options["rate"],
             cta=options["cta"],
@@ -248,6 +250,7 @@ def api_prepare_youtube():
     options = {
         "duration": int(data.get("duration") or fresh.video_duration),
         "style": data.get("style") or fresh.script_style,
+        "n_images": data.get("n_images") or "auto",
         "voice": data.get("voice") or fresh.tts_voice,
         "rate": data.get("rate") if data.get("rate") is not None else fresh.tts_rate,
         "cta": data.get("cta") or fresh.call_to_action,
@@ -279,6 +282,7 @@ def _run_prepare_youtube(job_id: str, url, options: dict) -> None:
             url,
             duration=options["duration"],
             style=options["style"],
+            n_images=options.get("n_images", "auto"),
             voice=options["voice"],
             rate=options["rate"],
             cta=options["cta"],
@@ -314,7 +318,7 @@ def api_draft_story():
     job_id = uuid.uuid4().hex[:12]
     options = {
         "duration": int(data.get("duration") or fresh.video_duration),
-        "n_images": max(8, int(data.get("n_images") or 8)),
+        "n_images": data.get("n_images") or "auto",
         "style": fresh.script_style,
         "voice": data.get("voice") or fresh.tts_voice,
         "rate": data.get("rate") if data.get("rate") is not None else fresh.tts_rate,

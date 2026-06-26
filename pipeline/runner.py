@@ -187,6 +187,7 @@ def prepare_video(
     *,
     duration: int | None = None,
     style: str | None = None,
+    n_images=None,
     voice: str | None = None,
     rate: str | None = None,
     cta: str | None = None,
@@ -216,7 +217,7 @@ def prepare_video(
 
     # 2) Guion en escenas
     progress("Escribiendo el guion viral con IA...", 25)
-    script = generate_script(article, duration=duration, style=style, cta=cta)
+    script = generate_script(article, duration=duration, style=style, cta=cta, n_images=n_images)
     print(f"[guion] {len(script.scenes)} escenas generadas")
 
     # 3) Voz
@@ -264,6 +265,7 @@ def prepare_youtube(
     *,
     duration: int | None = None,
     style: str | None = None,
+    n_images=None,
     voice: str | None = None,
     rate: str | None = None,
     cta: str | None = None,
@@ -305,7 +307,7 @@ def prepare_youtube(
 
     # 2) Guion en escenas (mismo motor que el modo noticia)
     progress("Escribiendo el guion viral con IA...", 25)
-    script = generate_script(article, duration=duration, style=style, cta=cta)
+    script = generate_script(article, duration=duration, style=style, cta=cta, n_images=n_images)
     print(f"[guion] {len(script.scenes)} escenas generadas (desde YouTube)")
 
     # 3) Voz
@@ -352,7 +354,7 @@ def draft_story(
     story: str,
     *,
     duration: int | None = None,
-    n_images: int = 8,
+    n_images=8,
     voice: str | None = None,
     rate: str | None = None,
     cta: str | None = None,
