@@ -78,7 +78,11 @@ input:focus, select:focus { border-color: var(--accent); }
 }
 .btn-secondary:hover { background: rgba(255,255,255,0.06); }
 
-.hidden { display: none; }
+/* Esta clase SIEMPRE debe esconder el elemento, gane quien gane mas abajo.
+   El !important evita que reglas posteriores (como .scene-loading o
+   .music-extra, que usan display:flex) dejen visible algo que ya marcamos
+   como oculto. Sin esto, el letrero "Generando..." nunca se apagaba. */
+.hidden { display: none !important; }
 
 .alert {
   max-width: 880px; margin: 0 auto 20px; background: #3a2a10;

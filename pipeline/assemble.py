@@ -108,18 +108,42 @@ def _make_clip(
 ) -> None:
     """Crea un clip de video a partir de una imagen, con zoom suave."""
     frames = max(1, int(round(duration * FPS)))
-    # Ken Burns: alternamos acercar / alejar para dar dinamismo
+
+    # Ken Burns CONTINUO (no se congela nunca).
+    #
+    # Antes el zoom subia poquito a poquito hasta un tope (1.18) y se quedaba
+    # ahi. En videos cortos no se notaba porque cada imagen duraba poco; pero en
+    # videos largos, donde cada imagen aparece mucho tiempo en pantalla, llegaba
+    # al tope y se quedaba CONGELADA el resto del tiempo.
+    #
+    # Ahora usamos un vaiven suave (onda de coseno) ligado al numero de cuadro
+    # (la variable "on" de FFmpeg). La imagen se acerca, y al llegar al maximo
+    # regresa suavemente al inicio y vuelve a empezar: nunca se detiene, sin
+    # importar cuanto dure la imagen ni cuanto dure el video.
+    cycle_frames = max(1, int(round(8.0 * FPS)))  # un ciclo (acercar+alejar) ~8 s
+    zoom_min = 1.0
+    zoom_max = 1.18
+    amp = zoom_max - zoom_min
+    # "osc" va suavemente de 0 -> 1 -> 0 a lo largo de cada ciclo
+    osc = f"(1-cos(2*PI*on/{cycle_frames}))/2"
     if zoom_in:
-        z_expr = "min(zoom+0.0010,1.18)"
+        # arranca normal, se acerca y regresa
+        z_expr = f"{zoom_min:.3f}+{amp:.3f}*{osc}"
     else:
-        z_expr = "if(lte(zoom,1.0),1.18,max(1.0,zoom-0.0010))"
+        # arranca acercada, se aleja y regresa (alterna el ritmo entre imagenes)
+        z_expr = f"{zoom_max:.3f}-{amp:.3f}*{osc}"
+
+    # Mantenemos el zoom CENTRADO en la imagen (se ve mas natural que desde la esquina).
+    x_expr = "iw/2-(iw/zoom/2)"
+    y_expr = "ih/2-(ih/zoom/2)"
 
     # Escalamos grande primero para que el zoom no pixele, recortamos al formato
     # elegido, aplicamos zoompan y fijamos tamano final.
     vf = (
         f"scale={video_w*2}:{video_h*2}:force_original_aspect_ratio=increase,"
         f"crop={video_w*2}:{video_h*2},"
-        f"zoompan=z='{z_expr}':d={frames}:s={video_w}x{video_h}:fps={FPS},"
+        f"zoompan=z='{z_expr}':x='{x_expr}':y='{y_expr}':"
+        f"d={frames}:s={video_w}x{video_h}:fps={FPS},"
         f"setsar=1,format=yuv420p"
     )
     cmd = [
