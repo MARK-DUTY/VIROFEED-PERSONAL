@@ -75,9 +75,69 @@ from pipeline.runner import (
     update_scene_prompt,
     update_scene_text,
 )
-from pipeline.voice import list_spanish_voices
+from pipeline.voice import list_spanish_voices, synthesize_voice_sample
 
 app = Flask(__name__)
+
+
+# Nombres de pais por codigo de idioma, para mostrar voces de forma amigable
+# (ej: "es-MX-DaliaNeural" -> "Mexico"). Asi el usuario ubica rapido la voz.
+_ES_COUNTRIES = {
+    "es-MX": "Mexico", "es-ES": "Espana", "es-AR": "Argentina",
+    "es-CO": "Colombia", "es-US": "Estados Unidos", "es-CL": "Chile",
+    "es-PE": "Peru", "es-VE": "Venezuela", "es-EC": "Ecuador",
+    "es-GT": "Guatemala", "es-CR": "Costa Rica", "es-PA": "Panama",
+    "es-DO": "Rep. Dominicana", "es-UY": "Uruguay", "es-PY": "Paraguay",
+    "es-BO": "Bolivia", "es-SV": "El Salvador", "es-HN": "Honduras",
+    "es-NI": "Nicaragua", "es-PR": "Puerto Rico", "es-CU": "Cuba",
+    "es-GQ": "Guinea Ecuatorial",
+}
+
+# Atajos de genero -> voz concreta (para el preview cuando el usuario tiene
+# elegida una opcion generica como "automatica", "hombre" o "mujer").
+_PREVIEW_MALE = "es-MX-JorgeNeural"
+_PREVIEW_FEMALE = "es-MX-DaliaNeural"
+_GENERIC_VOICE = {
+    "": _PREVIEW_MALE, "random": _PREVIEW_MALE, "auto": _PREVIEW_MALE,
+    "automatica": _PREVIEW_MALE, "automática": _PREVIEW_MALE,
+    "aleatoria": _PREVIEW_MALE, "azar": _PREVIEW_MALE,
+    "hombre": _PREVIEW_MALE, "masculino": _PREVIEW_MALE,
+    "mujer": _PREVIEW_FEMALE, "femenino": _PREVIEW_FEMALE,
+}
+
+
+def _voice_options() -> list[dict]:
+    """
+    Lista de voces en espanol con una etiqueta amigable para el menu:
+      {"value": "es-MX-DaliaNeural", "label": "es-MX-DaliaNeural - Mexico - Mujer"}
+    Asi el usuario reconoce de que pais es y si es hombre o mujer.
+    """
+    options = []
+    for v in list_spanish_voices():
+        short = v.get("ShortName")
+        if not short:
+            continue
+        locale = v.get("Locale", "")
+        country = _ES_COUNTRIES.get(locale, locale or "Espanol")
+        gender = "Mujer" if str(v.get("Gender", "")).lower().startswith("f") else "Hombre"
+        options.append({"value": short, "label": f"{short}  ·  {country}  ·  {gender}"})
+    # Ordenamos: primero Mexico, luego Espana, luego el resto (alfabetico).
+    def _rank(opt):
+        val = opt["value"]
+        if val.startswith("es-MX"):
+            return (0, val)
+        if val.startswith("es-ES"):
+            return (1, val)
+        return (2, val)
+    options.sort(key=_rank)
+    return options
+
+
+def _resolve_preview_voice(voice: str) -> str:
+    """Convierte una eleccion generica (automatica/hombre/mujer) en una voz
+    concreta para poder generar la muestra. Si ya es un nombre concreto, lo deja."""
+    key = (voice or "").strip().lower()
+    return _GENERIC_VOICE.get(key, voice.strip())
 
 
 def _parse_urls(data: dict) -> list[str]:
@@ -105,13 +165,12 @@ JOBS: dict[str, dict] = {}
 @app.route("/")
 def index():
     missing = settings.missing_keys()
-    voices = list_spanish_voices()
-    voice_names = [v.get("ShortName") for v in voices] if voices else []
+    voice_options = _voice_options()
     return render_template(
         "index.html",
         missing_keys=missing,
         avatar_enabled=settings.avatar_enabled,
-        voice_names=voice_names,
+        voice_options=voice_options,
         defaults={
             "voice": settings.tts_voice,
             "rate": settings.tts_rate,
@@ -712,13 +771,41 @@ def serve_preview(job_id: str, filename: str):
 
 
 # --------------------------------------------------------------------------
+#  Escuchar una MUESTRA de voz antes de elegirla
+# --------------------------------------------------------------------------
+# Carpeta donde guardamos las muestras de voz (se reutilizan = mas rapido).
+_PREVIEW_DIR = settings.work_dir / "voice_previews"
+
+
+@app.route("/api/preview_voice", methods=["POST"])
+def api_preview_voice():
+    """Genera (o reutiliza) un audio corto de ejemplo para la voz pedida y
+    devuelve la URL para reproducirlo en el navegador."""
+    data = request.get_json(force=True) or {}
+    voice = _resolve_preview_voice(data.get("voice") or "")
+    if not voice:
+        return jsonify({"error": "No se indico ninguna voz."}), 400
+    try:
+        path = synthesize_voice_sample(voice, _PREVIEW_DIR)
+        return jsonify({"ok": True, "voice": voice, "audio_url": f"/voice_preview/{path.name}"})
+    except Exception as exc:  # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/voice_preview/<path:filename>")
+def serve_voice_preview(filename: str):
+    resp = send_from_directory(_PREVIEW_DIR, filename)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+# --------------------------------------------------------------------------
 #  Servir y descargar los videos finales
 # --------------------------------------------------------------------------
 @app.route("/video/<path:filename>")
 def serve_video(filename: str):
     return send_from_directory(settings.output_dir, filename)
-
-
 @app.route("/download/<path:filename>")
 def download_video(filename: str):
     return send_from_directory(settings.output_dir, filename, as_attachment=True)
@@ -735,7 +822,7 @@ def _open_browser():
 if __name__ == "__main__":
     print("=" * 60)
     print("  ViroFeed AI Personal")
-    print("  VERSION DEL CODIGO: 20 (menu de medios 3 opciones + videos + YouTube a prueba de fallos)")
+    print("  VERSION DEL CODIGO: 21 (videos cortos 1-3 imagenes + escuchar voces)")
     print("  Abriendo en tu navegador: http://localhost:5000")
     print("  (Para cerrar el programa, cierra esta ventana)")
     print("=" * 60)

@@ -58,29 +58,58 @@ def _scene_count_for(duration: int) -> int:
     SECONDS_PER_IMAGE segundos). Asi un video largo tiene MAS fotos y la gente
     no se aburre viendo la misma imagen mucho tiempo.
 
-    Ej (con 8 s/foto): 45s->6, 60s->8, 120s->15, 180s->23, 300s->38.
+    Ej (con 8 s/foto): 10s->1, 20s->2, 45s->6, 60s->8, 120s->15, 300s->38.
     """
-    return max(3, min(40, round(duration / SECONDS_PER_IMAGE)))
+    return max(1, min(40, round(duration / SECONDS_PER_IMAGE)))
+
+
+# Palabras que significan "automatico" (deja que el programa decida el numero).
+_AUTO_WORDS = {"", "auto", "automatico", "automático", "0"}
+
+
+def _is_explicit_count(n_images) -> bool:
+    """
+    True si el usuario eligio un NUMERO concreto de imagenes (ej: 1, 2, 3, 8...).
+    False si eligio "automatico". Sirve para saber si debemos respetar EXACTO
+    ese numero (sobre todo para videos cortos tipo comercial).
+    """
+    if n_images is None:
+        return False
+    texto = str(n_images).strip().lower()
+    if texto in _AUTO_WORDS:
+        return False
+    try:
+        int(float(texto))
+        return True
+    except ValueError:
+        return False
 
 
 def _resolve_n_images(n_images, duration: int) -> int:
     """
     Decide cuantas fotos/escenas usar a partir de lo que eligio el usuario.
 
-    - "auto" / vacio / None -> automatico segun la duracion, pero NUNCA menos de 8.
-    - un numero -> se respeta, limitado entre 8 (minimo) y 40 (maximo).
+    - "auto" / vacio / None -> automatico segun la duracion. Para videos de 30s
+      o mas mantenemos un minimo de 8 (mas dinamico); para videos cortos
+      (menos de 30s) permitimos menos (util para anuncios/comerciales).
+    - un numero -> se respeta TAL CUAL, limitado entre 1 (minimo) y 40 (maximo).
+      Asi puedes hacer un comercial de 10s con UNA sola imagen.
 
     Asi el usuario puede decidir cuantas imagenes quiere en CUALQUIER modo
     (noticia, YouTube o historia), sin importar la duracion del video.
     """
-    auto = max(8, _scene_count_for(duration))
+    auto = _scene_count_for(duration)
+    if duration >= 30:
+        auto = max(8, auto)   # videos normales/largos: minimo 8 (mas dinamico)
+    else:
+        auto = max(1, auto)   # videos cortos: respetamos lo que da la duracion
     if n_images is None:
         return auto
     texto = str(n_images).strip().lower()
-    if texto in ("", "auto", "automatico", "automático", "0"):
+    if texto in _AUTO_WORDS:
         return auto
     try:
-        return max(8, min(40, int(float(texto))))
+        return max(1, min(40, int(float(texto))))
     except ValueError:
         return auto
 
@@ -206,7 +235,9 @@ def _build_story_prompt(story: str, duration: int, n_images: int, cta: str) -> l
     """
     target_words = int(duration * _WORDS_PER_SECOND)
     min_words = max(1, target_words - _tolerance_words(duration))
-    n_scenes = max(8, int(n_images or 8))   # MINIMO 8 escenas/imagenes
+    # Respetamos el numero de escenas que ya viene resuelto (puede ser 1 para
+    # un comercial corto). El minimo real es 1.
+    n_scenes = max(1, int(n_images or 1))
 
     system = (
         "Eres un guionista experto en videos cortos virales (Reels, TikTok, "
@@ -507,6 +538,39 @@ def _enforce_scene_count(scenes: list[Scene], target: int) -> None:
         scenes.insert(idx + 1, Scene(text=second, image_prompt=base.image_prompt, keyword=base.keyword))
 
 
+def _reduce_scene_count(scenes: list[Scene], target: int) -> None:
+    """
+    Si hay MAS escenas (= fotos) que las que pidio el usuario, FUSIONA escenas
+    vecinas hasta dejar exactamente `target`. No se pierde NADA del guion: el
+    texto narrado de las dos escenas se une, solo se reduce el numero de
+    imagenes. Esto es clave para videos cortos: ej. un comercial de 10s con
+    UNA sola imagen, aunque la IA haya escrito el guion en 3 partes.
+
+    Para fusionar elegimos cada vez el par de escenas vecinas con MENOS
+    palabras combinadas, para mantener el reparto lo mas parejo posible.
+    """
+    target = max(1, target)
+    guard = 0
+    while len(scenes) > target and len(scenes) > 1 and guard < 500:
+        guard += 1
+        best_i = 0
+        best_words = None
+        for i in range(len(scenes) - 1):
+            combined = len(scenes[i].text.split()) + len(scenes[i + 1].text.split())
+            if best_words is None or combined < best_words:
+                best_words = combined
+                best_i = i
+        a = scenes[best_i]
+        b = scenes[best_i + 1]
+        merged = Scene(
+            text=(a.text.strip() + " " + b.text.strip()).strip(),
+            image_prompt=(a.image_prompt or b.image_prompt),
+            keyword=(a.keyword or b.keyword),
+        )
+        scenes[best_i] = merged
+        del scenes[best_i + 1]
+
+
 def _coverage_warning(
     achieved_words: int, target_words: int, tol_words: int, duration: int, suggestion: str
 ) -> str:
@@ -537,12 +601,17 @@ def _fit_length_and_scenes(
     timeout: int,
     source_kind: str,
     suggestion: str,
+    exact_scene_count: bool = False,
 ) -> VideoScript:
     """
     Ajusta el guion a la duracion pedida:
       1) Si quedo CORTO -> le pide a la IA que lo ALARGUE (hasta _MAX_EXPAND_TRIES).
       2) Si se paso MUCHO -> recorta escenas (deja gancho y cierre).
-      3) Garantiza el numero de fotos partiendo escenas largas.
+      3) Ajusta el numero de fotos:
+           - Si el usuario eligio un NUMERO exacto (exact_scene_count=True):
+             fusiona escenas si hay de mas y parte si hay de menos, dejando
+             EXACTO ese numero (clave para comerciales cortos de 1-3 imagenes).
+           - Si es automatico: solo garantiza un MINIMO partiendo escenas largas.
       4) Calcula el aviso si no se pudo llegar a la duracion (falta material).
     """
     target_words = int(duration * _WORDS_PER_SECOND)
@@ -572,8 +641,15 @@ def _fit_length_and_scenes(
     # 2) RECORTAR si se paso mucho del objetivo (deja gancho y cierre)
     _trim_scenes_to_words(script.scenes, target_words + tol_words)
 
-    # 3) GARANTIZAR el numero de fotos (parte escenas largas si hacen falta)
-    _enforce_scene_count(script.scenes, n_scenes)
+    # 3) AJUSTAR el numero de fotos
+    if exact_scene_count:
+        # El usuario pidio un numero EXACTO: fusiona si hay de mas...
+        _reduce_scene_count(script.scenes, n_scenes)
+        # ...y parte si hay de menos (p. ej. pidio 3 pero la IA dio 2).
+        _enforce_scene_count(script.scenes, n_scenes)
+    else:
+        # Automatico: solo garantiza el minimo partiendo escenas largas.
+        _enforce_scene_count(script.scenes, n_scenes)
 
     # 4) Recalcular narracion y aviso final
     script.narration = " ".join(s.text for s in script.scenes if s.text.strip()).strip()
@@ -601,6 +677,7 @@ def generate_script(
 
     style_desc = _STYLE_DESC.get(style, _STYLE_DESC["breaking"])
     n_scenes = _resolve_n_images(n_images, duration)
+    exact = _is_explicit_count(n_images)
     target_words = int(duration * _WORDS_PER_SECOND)
     src_chars = min(16000, max(6000, target_words * 25))
     max_tokens = _tokens_for(duration)
@@ -621,6 +698,7 @@ def generate_script(
         timeout=timeout,
         source_kind="noticia",
         suggestion="Agrega otra URL de noticia (una por renglon) o mas contexto y vuelve a generar.",
+        exact_scene_count=exact,
     )
     print(
         f"[guion] {len(script.scenes)} escenas, ~{_count_words(script.scenes)} palabras "
@@ -652,9 +730,10 @@ def generate_script_from_story(
     duration = duration or settings.video_duration
     cta = cta or settings.call_to_action
 
-    # El usuario decide el numero de imagenes (minimo 8); "auto" lo calcula
+    # El usuario decide el numero de imagenes (minimo 1); "auto" lo calcula
     # segun la duracion. Es el mismo criterio que en el modo noticia.
     n_scenes = _resolve_n_images(n_images, duration)
+    exact = _is_explicit_count(n_images)
     style_desc = "estilo narrativo atractivo y con buen ritmo"
     target_words = int(duration * _WORDS_PER_SECOND)
     max_tokens = _tokens_for(duration)
@@ -675,6 +754,7 @@ def generate_script_from_story(
         timeout=timeout,
         source_kind="historia",
         suggestion="Agrega mas detalles a tu historia y vuelve a generar.",
+        exact_scene_count=exact,
     )
     print(
         f"[historia] {len(script.scenes)} escenas, ~{_count_words(script.scenes)} palabras "

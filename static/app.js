@@ -646,6 +646,52 @@ function showWarning(elId, msg) {
 }
 
 // ----------------------------------------------------------------------
+//  Escuchar una MUESTRA de la voz seleccionada (antes de generar el video)
+// ----------------------------------------------------------------------
+async function previewVoice() {
+  const btn = $("voice-preview-btn");
+  const status = $("voice-preview-status");
+  const audio = $("voice-preview-audio");
+  const voice = $("voice") ? $("voice").value : "";
+
+  // Si esta sonando, lo paramos (el boton sirve para reproducir/parar).
+  if (audio && !audio.paused) {
+    audio.pause();
+    audio.currentTime = 0;
+    status.textContent = "";
+    btn.textContent = "🔊 Escuchar esta voz";
+    return;
+  }
+
+  btn.disabled = true;
+  status.textContent = "Generando muestra...";
+  try {
+    const resp = await fetch("/api/preview_voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voice }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      status.textContent = "❌ " + (data.error || "No se pudo generar la muestra.");
+      return;
+    }
+    status.textContent = "▶️ Sonando: " + data.voice;
+    audio.src = data.audio_url + "?t=" + Date.now();
+    btn.textContent = "⏹️ Detener";
+    audio.onended = () => {
+      btn.textContent = "🔊 Escuchar esta voz";
+      status.textContent = "";
+    };
+    await audio.play();
+  } catch (e) {
+    status.textContent = "❌ No pude contactar al programa. ¿Sigue abierta la ventana negra?";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ----------------------------------------------------------------------
 //  Eventos
 // ----------------------------------------------------------------------
 $("tab-btn-url").addEventListener("click", () => switchTab("url"));
@@ -661,6 +707,21 @@ $("new-btn").addEventListener("click", () => show(formCard));
 $("retry-btn").addEventListener("click", () => show(formCard));
 
 setupMusicControls();
+
+// Boton "Escuchar voz" + reset de la muestra al cambiar de voz
+if ($("voice-preview-btn")) {
+  $("voice-preview-btn").addEventListener("click", previewVoice);
+}
+if ($("voice")) {
+  $("voice").addEventListener("change", () => {
+    const audio = $("voice-preview-audio");
+    if (audio && !audio.paused) { audio.pause(); audio.currentTime = 0; }
+    const btn = $("voice-preview-btn");
+    if (btn) btn.textContent = "🔊 Escuchar esta voz";
+    const status = $("voice-preview-status");
+    if (status) status.textContent = "";
+  });
+}
 
 // Aviso de video largo: revisar al cargar y cada vez que cambie la duracion
 if ($("duration")) {

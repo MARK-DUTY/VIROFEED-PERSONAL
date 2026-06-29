@@ -72,6 +72,9 @@
         <label class="field">
           <span>Duracion</span>
           <select id="duration">
+            <option value="10" {% if defaults.duration==10 %}selected{% endif %}>10 segundos (anuncio corto)</option>
+            <option value="15" {% if defaults.duration==15 %}selected{% endif %}>15 segundos</option>
+            <option value="20" {% if defaults.duration==20 %}selected{% endif %}>20 segundos</option>
             <option value="30" {% if defaults.duration==30 %}selected{% endif %}>30 segundos</option>
             <option value="45" {% if defaults.duration==45 %}selected{% endif %}>45 segundos</option>
             <option value="60" {% if defaults.duration==60 %}selected{% endif %}>60 segundos (1 min)</option>
@@ -89,7 +92,10 @@
           <span>Imágenes / videos del video</span>
           <select id="media_plan">
             <optgroup label="🖼️ Solo imágenes (fotos)">
-              <option value="image:auto" selected>🔄 Automático imágenes (según duración, mínimo 8)</option>
+              <option value="image:auto" selected>🔄 Automático imágenes (según duración)</option>
+              <option value="image:1">1 imagen (anuncio de 10s)</option>
+              <option value="image:2">2 imágenes (anuncio de ~20s)</option>
+              <option value="image:3">3 imágenes (anuncio de ~30s)</option>
               <option value="image:8">8 imágenes</option>
               <option value="image:10">10 imágenes</option>
               <option value="image:12">12 imágenes</option>
@@ -99,7 +105,10 @@
               <option value="image:30">30 imágenes</option>
             </optgroup>
             <optgroup label="🎞️ Solo videos (clips reales)">
-              <option value="video:auto">🔄 Automático videos (según duración, mínimo 8)</option>
+              <option value="video:auto">🔄 Automático videos (según duración)</option>
+              <option value="video:1">1 video (anuncio de 10s)</option>
+              <option value="video:2">2 videos (anuncio de ~20s)</option>
+              <option value="video:3">3 videos (anuncio de ~30s)</option>
               <option value="video:8">8 videos</option>
               <option value="video:10">10 videos</option>
               <option value="video:12">12 videos</option>
@@ -109,7 +118,10 @@
               <option value="video:30">30 videos</option>
             </optgroup>
             <optgroup label="🎬 Mixto (video y, si no hay, imagen)">
-              <option value="mixed:auto">🔄 Automático mixto (según duración, mínimo 8)</option>
+              <option value="mixed:auto">🔄 Automático mixto (según duración)</option>
+              <option value="mixed:1">1 escena (anuncio de 10s)</option>
+              <option value="mixed:2">2 escenas (anuncio de ~20s)</option>
+              <option value="mixed:3">3 escenas (anuncio de ~30s)</option>
               <option value="mixed:8">8 escenas</option>
               <option value="mixed:10">10 escenas</option>
               <option value="mixed:12">12 escenas</option>
@@ -121,6 +133,12 @@
           </select>
         </label>
       </div>
+
+      <p class="hint" id="short-ad-hint">
+        👟 <strong>¿Vas a hacer un anuncio/comercial corto?</strong> Elige <strong>Duración: 10 segundos</strong>
+        y, en este menú, <strong>1 imagen</strong> (o 1 video). Escribe en el diálogo solo lo justo para esos
+        segundos. Así controlas exactamente cuántas imágenes salen.
+      </p>
 
       <p class="hint" id="media-plan-hint">
         🎞️ <strong>Videos / Mixto:</strong> el programa usa <strong>clips de video reales y gratis</strong>
@@ -151,18 +169,23 @@
           <span>Voz</span>
           <select id="voice">
             <option value="random" {% if defaults.voice in ['random','auto','automatica','aleatoria','azar'] %}selected{% endif %}>🎲 Voz automatica (cambia en cada video)</option>
-            {% if voice_names %}
-              {% for v in voice_names %}
-                <option value="{{ v }}" {% if v==defaults.voice %}selected{% endif %}>{{ v }}</option>
+            {% if voice_options %}
+              {% for v in voice_options %}
+                <option value="{{ v.value }}" {% if v.value==defaults.voice %}selected{% endif %}>{{ v.label }}</option>
               {% endfor %}
             {% else %}
               <option value="{{ defaults.voice }}" selected>{{ defaults.voice }}</option>
-              <option value="es-MX-JorgeNeural">es-MX-JorgeNeural</option>
-              <option value="es-MX-DaliaNeural">es-MX-DaliaNeural</option>
-              <option value="es-ES-AlvaroNeural">es-ES-AlvaroNeural</option>
-              <option value="es-ES-ElviraNeural">es-ES-ElviraNeural</option>
+              <option value="es-MX-JorgeNeural">es-MX-JorgeNeural · Mexico · Hombre</option>
+              <option value="es-MX-DaliaNeural">es-MX-DaliaNeural · Mexico · Mujer</option>
+              <option value="es-ES-AlvaroNeural">es-ES-AlvaroNeural · Espana · Hombre</option>
+              <option value="es-ES-ElviraNeural">es-ES-ElviraNeural · Espana · Mujer</option>
             {% endif %}
           </select>
+          <div class="voice-preview">
+            <button type="button" id="voice-preview-btn" class="btn-mini">🔊 Escuchar esta voz</button>
+            <span class="voice-preview-status" id="voice-preview-status"></span>
+            <audio id="voice-preview-audio" preload="none"></audio>
+          </div>
         </label>
 
         <label class="field">

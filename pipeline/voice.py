@@ -9,6 +9,7 @@ perfectamente sincronizados (estilo CapCut / videos virales).
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -97,3 +98,46 @@ def list_spanish_voices() -> list[dict]:
         return asyncio.run(_list_voices_es())
     except Exception:
         return []
+
+
+# Frase de ejemplo para que el usuario ESCUCHE como suena una voz antes de
+# elegirla. Es corta para que se genere rapido.
+VOICE_SAMPLE_TEXT = (
+    "Hola, asi se escuchara la narracion de tu video. "
+    "Espero que esta voz te guste para tu proyecto."
+)
+
+
+def synthesize_voice_sample(
+    voice: str,
+    previews_dir: Path,
+    rate: str = "+0%",
+) -> Path:
+    """
+    Genera (o reutiliza) un audio CORTO de ejemplo con la voz indicada, para que
+    el usuario la escuche antes de elegirla. Guarda el archivo en `previews_dir`
+    con un nombre basado en la voz, asi la segunda vez no lo vuelve a generar
+    (cache) y suena al instante.
+    """
+    voice = (voice or "").strip()
+    if not voice:
+        raise ValueError("No se indico ninguna voz para la muestra.")
+
+    previews_dir = Path(previews_dir)
+    previews_dir.mkdir(parents=True, exist_ok=True)
+
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", voice)
+    out_path = previews_dir / f"sample_{safe}.mp3"
+
+    # Si ya la generamos antes, la reutilizamos (mas rapido).
+    if out_path.exists() and out_path.stat().st_size > 0:
+        return out_path
+
+    asyncio.run(_synthesize(VOICE_SAMPLE_TEXT, voice, rate, out_path))
+
+    if not out_path.exists() or out_path.stat().st_size == 0:
+        raise ValueError(
+            "No se pudo generar la muestra de voz. Revisa tu conexion a internet "
+            "(Edge TTS necesita internet) y que el nombre de la voz sea valido."
+        )
+    return out_path
